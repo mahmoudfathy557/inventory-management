@@ -77,7 +77,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
       amountEGP,
       allocationMethod,
       notes: notes || `إضافة تكاليف ${costType} على الإذن ${selectedReceipt.receiptNumber}`,
-      createdBy: currentUser.fullName
+      createdBy: currentUser?.fullName || 'System User'
     });
 
     setIsCreateOpen(false);

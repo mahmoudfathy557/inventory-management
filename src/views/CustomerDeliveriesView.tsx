@@ -74,7 +74,7 @@ export const CustomerDeliveriesView: React.FC = () => {
       sellingPriceEGP: sellingPrice,
       reference: salesOrderRef,
       notes: notes || 'صرف بضاعة تامة للعميل وفق أمر التوريد',
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       odooSynced: true
     });
 

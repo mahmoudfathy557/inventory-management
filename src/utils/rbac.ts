@@ -195,3 +195,54 @@ export function getEffectivePermissions(role: UserRole, overrides?: Partial<Perm
   if (!overrides) return base;
   return { ...base, ...overrides };
 }
+
+/**
+ * Checks if a given role is allowed to access a specific tab/section
+ */
+export function canAccessTab(role: UserRole, tabId: string): boolean {
+  switch (tabId) {
+    case 'auth':
+      return true; // Always accessible
+    case 'dashboard':
+      return true; // All authenticated roles can view their tailored dashboard
+
+    case 'receipts':
+    case 'transfers':
+    case 'issues':
+    case 'deliveries':
+      // Inventory, Admin, Finance, Management (read), or Production (issues only)
+      if (tabId === 'issues') return true;
+      return [UserRole.ADMIN, UserRole.INVENTORY_USER, UserRole.FINANCE_USER, UserRole.MANAGEMENT_USER].includes(role);
+
+    case 'landed-cost':
+    case 'cost-adjustments':
+      // Cost accounting & executive management & admin
+      return [UserRole.ADMIN, UserRole.FINANCE_USER, UserRole.MANAGEMENT_USER].includes(role);
+
+    case 'production':
+      // Production users, Admin, Management, Quality
+      return [UserRole.ADMIN, UserRole.PRODUCTION_USER, UserRole.QUALITY_USER, UserRole.MANAGEMENT_USER, UserRole.FINANCE_USER].includes(role);
+
+    case 'quality':
+      // QA, Admin, Production (view), Management
+      return [UserRole.ADMIN, UserRole.QUALITY_USER, UserRole.PRODUCTION_USER, UserRole.MANAGEMENT_USER].includes(role);
+
+    case 'reports':
+      return true; // All authenticated users can view reports tailored to their permissions
+
+    case 'odoo-sync':
+      // Admin and Finance
+      return [UserRole.ADMIN, UserRole.FINANCE_USER].includes(role);
+
+    case 'master-data':
+      // Admin, Finance, Production
+      return [UserRole.ADMIN, UserRole.FINANCE_USER, UserRole.PRODUCTION_USER, UserRole.INVENTORY_USER, UserRole.MANAGEMENT_USER].includes(role);
+
+    case 'users':
+      // Strictly Super Admin
+      return role === UserRole.ADMIN;
+
+    default:
+      return true;
+  }
+}

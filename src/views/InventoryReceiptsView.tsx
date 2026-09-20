@@ -96,8 +96,8 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
       totalValueEGP,
       reference,
       notes,
-      createdBy: currentUser.fullName,
-      approvedBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
+      approvedBy: currentUser?.fullName || 'System User',
       approvalDate: new Date().toISOString().replace('T', ' ').substring(0, 16)
     });
 

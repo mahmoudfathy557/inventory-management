@@ -61,7 +61,7 @@ export const RBACMatrixModal: React.FC<RBACMatrixModalProps> = ({ isOpen, onClos
         <div className="p-6 overflow-y-auto space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.values(RBAC_ROLE_DEFINITIONS).map((def) => {
-              const isCurrent = currentUser.role === def.code;
+              const isCurrent = currentUser?.role === def.code;
               return (
                 <div
                   key={def.code}

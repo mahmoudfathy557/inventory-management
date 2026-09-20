@@ -59,7 +59,7 @@ export const InventoryIssuesView: React.FC = () => {
       reason,
       reference,
       notes,
-      createdBy: currentUser.fullName
+      createdBy: currentUser?.fullName || 'System User'
     });
 
     setIsCreateOpen(false);

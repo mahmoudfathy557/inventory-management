@@ -65,7 +65,7 @@ export const InventoryTransfersView: React.FC = () => {
       totalValueEGP,
       reference,
       notes: notes || 'تحويل داخلي لخطوط الإنتاج',
-      createdBy: currentUser.fullName
+      createdBy: currentUser?.fullName || 'System User'
     });
 
     setIsCreateOpen(false);

@@ -121,7 +121,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       expectedFinishedQuantity: plannedQty * 0.9,
       expectedScrapQuantity: plannedQty * 0.1,
       notes: notes || 'أمر إنتاج معتمد للمصنع',
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'Production Engineer',
       materials: activeBom.lines.map(l => ({
         id: 'mat-' + Math.random(),
         rawMaterialId: l.rawMaterialId,
@@ -163,7 +163,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       movingAverageCostEGP: rawMat.movingAverageCost || 110,
       totalActualCostEGP: issueQty * (rawMat.movingAverageCost || 110),
       warehouseId: selectedOrder.wipWarehouseId || 'wh-raw',
-      createdBy: currentUser.fullName
+      createdBy: currentUser?.fullName || 'Production Engineer'
     });
 
     setIsIssueModalOpen(false);
@@ -192,7 +192,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       totalMaterialCostEGP: totalCost,
       finishedGoodsUnitCostEGP: unitCost,
       qualityStatus: QualityStatus.PENDING,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'Production Engineer',
       notes: 'استلام مخرجات تشغيل بانتظار فحص الجودة'
     });
 
@@ -216,7 +216,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       amountEGP: adjAmount,
       allocationMethod: CostAllocationMethod.DIRECT_AMOUNT,
       description: adjReason || 'تعديل وتوزيع تكلفة متأخرة وفق البند 48',
-      createdBy: currentUser.fullName
+      createdBy: currentUser?.fullName || 'Cost Accountant'
     });
 
     setIsCostAdjOpen(false);

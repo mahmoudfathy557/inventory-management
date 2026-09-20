@@ -86,8 +86,10 @@ import {
 interface AppContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  currentUser: User;
-  setCurrentUser: (user: User) => void;
+  currentUser: User | null;
+  setCurrentUser: (user: User | null) => void;
+  isAuthenticated: boolean;
+  logout: () => void;
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
 
@@ -193,7 +195,16 @@ function saveStorage<T>(key: string, data: T) {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => loadStorage<Language>('lang', 'ar'));
-  const [currentUser, setCurrentUserState] = useState<User>(() => loadStorage<User>('user', INITIAL_USERS[0]));
+  const [currentUser, setCurrentUserState] = useState<User | null>(() => {
+    // Check auth token or stored user
+    const token = authService.getToken();
+    const storedUser = authService.getStoredUser();
+    if (token && storedUser) return storedUser;
+    // Check saved user in storage
+    const saved = loadStorage<User | null>('user', null);
+    if (saved && saved.id) return saved;
+    return null;
+  });
   const [users, setUsers] = useState<User[]>(() => loadStorage<User[]>('users', INITIAL_USERS));
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>(() => loadStorage('warehouses', INITIAL_WAREHOUSES));
@@ -302,9 +313,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   };
 
-  const setCurrentUser = (user: User) => {
+  const setCurrentUser = (user: User | null) => {
     setCurrentUserState(user);
-    logAudit('USER_SWITCH', 'جلسة مستخدم', user.id, `تم تبديل المستخدم الحالي إلى ${user.fullName} (${user.role})`);
+    if (user) {
+      logAudit('USER_SWITCH', 'جلسة مستخدم', user.id, `تم تسجيل دخول / تبديل المستخدم الحالي إلى ${user.fullName} (${user.role})`);
+    }
+  };
+
+  const logout = () => {
+    if (currentUser) {
+      logAudit('USER_LOGOUT', 'جلسة مستخدم', currentUser.id, `تم تسجيل خروج المستخدم ${currentUser.fullName}`);
+    }
+    authService.clearAuth();
+    setCurrentUserState(null);
   };
 
   const logAudit = (action: string, docType: string, docNum: string, details: string, oldVal?: string, newVal?: string) => {
@@ -313,7 +334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'aud-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       date: now.toISOString().split('T')[0],
       time: now.toTimeString().split(' ')[0],
-      userName: currentUser.fullName,
+      userName: currentUser?.fullName || 'System Admin',
       action,
       documentType: docType,
       documentNumber: docNum,
@@ -400,7 +421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.totalValueEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: newMAC,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: data.notes
     };
 
@@ -476,7 +497,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.amountEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: newMAC,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: `${data.costType} - زيادة القيمة وتحديث متوسط التكلفة بدون زيادة الكمية`
     };
 
@@ -537,7 +558,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.totalIssueValueEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: mac,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: data.notes
     };
 
@@ -584,7 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.totalValueEGP,
       runningInventoryValueEGP: 0,
       movingAverageCostEGP: data.unitCostEGP,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: data.notes
     };
 
@@ -609,7 +630,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.totalValueEGP,
       runningInventoryValueEGP: data.totalValueEGP,
       movingAverageCostEGP: data.unitCostEGP,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: data.notes
     };
 
@@ -656,8 +677,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const modRecord = {
           version: newVersion,
           date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          modifiedBy: currentUser.fullName,
-          approvedBy: currentUser.fullName,
+          modifiedBy: currentUser?.fullName || 'System User',
+          approvedBy: currentUser?.fullName || 'System User',
           reason,
           changesSummary: Object.keys(changes).join(', ')
         };
@@ -750,7 +771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.totalActualCostEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: mac,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: `صرف خامات لأمر الإنتاج ${data.productionOrderNumber}`
     };
 
@@ -849,7 +870,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         transactionValueEGP: receipt.totalMaterialCostEGP,
         runningInventoryValueEGP: newFGVal,
         movingAverageCostEGP: newFGMAC,
-        createdBy: currentUser.fullName,
+        createdBy: currentUser?.fullName || 'Quality Officer',
         notes: `استلام منتج تام بعد اعتماد الجودة (${reason || 'مطابق للمواصفات القياسية'})`
       };
 
@@ -874,7 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         transactionValueEGP: 0,
         runningInventoryValueEGP: 0,
         movingAverageCostEGP: 0,
-        createdBy: currentUser.fullName,
+        createdBy: currentUser?.fullName || 'Quality Officer',
         notes: 'هالك تصنيع مسجل بقيمة معيارية 0 ج.م حسب معيار MVP'
       };
 
@@ -887,7 +908,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...o,
             qualityStatus: QualityStatus.APPROVED,
             status: ProductionOrderStatus.COMPLETED,
-            qualityApprovedBy: currentUser.fullName,
+            qualityApprovedBy: currentUser?.fullName || 'Quality Officer',
             qualityApprovalDate: approvalDate,
             qualityNotes: reason
           };
@@ -901,7 +922,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...r,
             qualityStatus: QualityStatus.APPROVED,
-            qualityApprovedBy: currentUser.fullName,
+            qualityApprovedBy: currentUser?.fullName || 'Quality Officer',
             qualityApprovalDate: approvalDate,
             qualityDecisionReason: reason
           };
@@ -917,7 +938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...o,
             qualityStatus: QualityStatus.REJECTED,
-            qualityApprovedBy: currentUser.fullName,
+            qualityApprovedBy: currentUser?.fullName || 'Quality Officer',
             qualityApprovalDate: approvalDate,
             qualityNotes: `مرفوض: ${reason}`
           };
@@ -930,7 +951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...r,
             qualityStatus: QualityStatus.REJECTED,
-            qualityApprovedBy: currentUser.fullName,
+            qualityApprovedBy: currentUser?.fullName || 'Quality Officer',
             qualityApprovalDate: approvalDate,
             qualityDecisionReason: reason
           };
@@ -991,7 +1012,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: data.totalDeliveryValueEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: mac,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: data.notes
     };
 
@@ -1037,7 +1058,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       quantityIssuedOrSold: qtyIssuedOrSold,
       inventoryAdjustmentEGP: inventoryAdj,
       cogsAdjustmentEGP: cogsAdj,
-      approvedBy: currentUser.fullName,
+      approvedBy: currentUser?.fullName || 'Cost Accountant',
       approvalDate: new Date().toISOString().replace('T', ' ').substring(0, 16)
     };
 
@@ -1092,7 +1113,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         transactionValueEGP: inventoryAdj,
         runningInventoryValueEGP: (product.totalValue || 0) + inventoryAdj,
         movingAverageCostEGP: ((product.totalValue || 0) + inventoryAdj) / qtyInStock,
-        createdBy: currentUser.fullName,
+        createdBy: currentUser?.fullName || 'Cost Accountant',
         notes: `تعديل تكلفة إضافية (${data.costType}) للمخزون القائم: ${inventoryAdj.toLocaleString('en-US')} ج.م، ولتكلفة المبيعات: ${cogsAdj.toLocaleString('en-US')} ج.م`
       };
       setLedgerEntries(prev => [...prev, ledgerEntry]);
@@ -1144,7 +1165,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionValueEGP: 0,
       runningInventoryValueEGP: 0,
       movingAverageCostEGP: 0,
-      createdBy: currentUser.fullName,
+      createdBy: currentUser?.fullName || 'System User',
       notes: `تم الإلغاء والعكس بسبب: ${reason}`
     };
     setLedgerEntries(prev => [...prev, ledgerEntry]);
@@ -1459,6 +1480,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLanguage,
         currentUser,
         setCurrentUser,
+        isAuthenticated: !!currentUser,
+        logout,
         users,
         setUsers,
         seedFullCoverageData,

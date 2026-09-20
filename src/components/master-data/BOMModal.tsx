@@ -141,7 +141,7 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
       effectiveFrom: bom?.effectiveFrom || new Date().toISOString().split('T')[0],
       status,
       approvalStatus: 'APPROVED',
-      approvedBy: currentUser.fullName,
+      approvedBy: currentUser?.fullName || 'System Admin',
       approvedDate: new Date().toISOString().split('T')[0],
       lines: lines.map((l, index) => ({
         ...l,
