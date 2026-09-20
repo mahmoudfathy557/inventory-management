@@ -100,7 +100,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
           return res.status(409).json({ error: 'User with this email already exists.' });
         }
 
-        const [created] = await db.insert(usersTable).values({
+        const [created] = await (db.insert(usersTable as any) as any).values({
           id: newUserId,
           username: username.toLowerCase().trim(),
           fullName,
@@ -278,7 +278,7 @@ router.post('/data/entities/:entityType', authenticateToken, async (req: Request
 
   if (db) {
     try {
-      await db.insert(appEntitiesTable)
+      await (db.insert(appEntitiesTable as any) as any)
         .values({
           entityType,
           data,
@@ -320,7 +320,7 @@ router.post('/data/sync-full', authenticateToken, async (req: Request, res: Resp
   if (db) {
     try {
       for (const [key, value] of entries) {
-        await db.insert(appEntitiesTable)
+        await (db.insert(appEntitiesTable as any) as any)
           .values({
             entityType: key,
             data: value as any,
@@ -363,8 +363,7 @@ router.post('/seed', async (req: Request, res: Response) => {
     try {
       for (const u of SEED_USERS) {
         const passwordHash = bcrypt.hashSync('Password123!', 8);
-        await db
-          .insert(usersTable)
+        await (db.insert(usersTable as any) as any)
           .values({
             id: u.id,
             username: u.username,
