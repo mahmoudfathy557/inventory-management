@@ -1,24 +1,22 @@
-# Multi-stage production Dockerfile optimized for Coolify / Docker / VPS deployment
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Set memory limit for Node build processes (prevents OOM during Vite 2300+ module bundling)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# Copy dependency manifests and .npmrc configuration
 COPY package*.json .npmrc ./
 
-# Install all build dependencies (including devDependencies needed for Vite & esbuild)
 RUN npm install --legacy-peer-deps
 
-# Copy application source code
 COPY . .
 
-# Build Vite React frontend (dist/) and bundle Express server (dist/server.cjs)
-RUN npm run build
+RUN echo "===== NODE =====" \
+    && node --version \
+    && echo "===== NPM =====" \
+    && npm --version \
+    && echo "===== BUILD =====" \
+    && npm run build
 
-# Production Runner stage
 FROM node:22-alpine AS runner
 
 WORKDIR /app
@@ -26,19 +24,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy package manifests and .npmrc configuration
 COPY package*.json .npmrc ./
 
-# Install only production runtime dependencies
 RUN npm install --omit=dev --legacy-peer-deps
 
-# Copy compiled frontend static assets and server bundle from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Expose production application port
 EXPOSE 3000
 
-# Launch bundled production Express server
 CMD ["node", "dist/server.cjs"]
-
-
