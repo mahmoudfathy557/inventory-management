@@ -6,8 +6,8 @@ WORKDIR /app
 # Set memory limit for Node build processes (prevents OOM during Vite 2300+ module bundling)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# Copy dependency manifests and .npmrc configuration
-COPY package*.json .npmrc ./
+# Copy dependency manifests and optional .npmrc configuration
+COPY package*.json .npmrc* ./
 
 # Install all build dependencies
 RUN npm install --legacy-peer-deps
@@ -26,8 +26,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy package manifests and .npmrc configuration
-COPY package*.json .npmrc ./
+# Copy package manifests and optional .npmrc configuration
+COPY package*.json .npmrc* ./
 
 # Install only production runtime dependencies
 RUN npm install --omit=dev --legacy-peer-deps
