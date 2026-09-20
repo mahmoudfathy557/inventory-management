@@ -90,17 +90,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
         <div className="space-y-1.5 z-10 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/30 text-blue-200 border border-blue-400/30">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>{isAr ? 'سيناريو الدورة المعيارية الجاهز (Section 47)' : 'Section 47 Verified MVP Flow'}</span>
+            <span>{isAr ? 'دورة التصنيع المتكاملة والتدقيق المخزني' : 'Integrated Manufacturing & Audit Flow'}</span>
           </div>
           <h2 className="text-lg font-bold">
             {isAr
-              ? 'نظام مراقبة المخزون وأوامر الإنتاج الصناعي ومتوسط التكلفة المتحرك'
+              ? 'نظام مراقبة المخزون وأوامر الإنتاج ومتوسط التكلفة المتحرك'
               : 'Manufacturing Inventory & Production Control Engine'}
           </h2>
           <p className="text-xs text-slate-300 leading-relaxed">
             {isAr
-              ? 'تم تحميل دورة العمل الكاملة: استلام خامات (1000 كجم) ⇽ تكلفة إنزال ⇽ تحويل للتشغيل ⇽ أمر إنتاج 900 كجم ⇽ استيعاب التكلفة ⇽ اعتماد الجودة ⇽ تسليم العميل ومزامنة أودو.'
-              : 'Pre-loaded end-to-end flow: 1,000 KG receipt + landed cost + WIP transfer + production order + 100% cost allocation + quality approval + customer delivery + Odoo sync.'}
+              ? 'دورة عمل متكاملة: توريد الخامات ⇽ احتساب تكاليف الإنزال ⇽ الصرف للتشغيل ⇽ أوامر الإنتاج واستيعاب التكلفة ⇽ فحص الجودة ⇽ تسليم العملاء ومزامنة أودو.'
+              : 'End-to-end industrial cycle: Inbound receipts, landed cost allocation, WIP transfers, production work orders, QA clearance, delivery dispatches, and Odoo ERP sync.'}
           </p>
         </div>
 
@@ -189,7 +189,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
             {formatNumber(totalScrapQty, language)} <span className="text-xs font-normal">كجم</span>
           </div>
           <div className="text-[11px] text-purple-700 font-medium">
-            {isAr ? 'قاعدة MVP: الهالك بقيمة معيارية صفر' : 'MVP Rule: 0 EGP Valuation'}
+            {isAr ? 'قاعدة التكلفة: الهالك بقيمة معيارية صفر' : 'Cost Rule: 0 EGP Valuation'}
           </div>
         </div>
       </div>

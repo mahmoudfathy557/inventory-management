@@ -83,7 +83,7 @@ export const WalkthroughModal: React.FC<WalkthroughModalProps> = ({ isOpen, onCl
     },
     {
       stepNum: 5,
-      titleAr: 'استلام الإنتاج وقاعدة الهالك (MVP Costing Rule)',
+      titleAr: 'استلام الإنتاج وقاعدة الهالك (Cost Absorption Rule)',
       titleEn: 'Receipt from Production & Scrap Rule',
       badgeAr: 'المرحلة 5: توزيع التكلفة',
       badgeEn: 'Stage 5: Cost Allocation',
@@ -91,7 +91,7 @@ export const WalkthroughModal: React.FC<WalkthroughModalProps> = ({ isOpen, onCl
       descEn: 'Finished Product = 900 KG, Scrap = 100 KG. Finished goods absorb 100% of material cost; Scrap is valued at 0 EGP.',
       mathAr: 'تكلفة المنتج التام = 110,000 ج.م ÷ 900 = 122.222 ج.م / كجم | قيمة السكراب = 0 ج.م',
       mathEn: 'Finished Goods Unit Cost = 110,000 / 900 = 122.222 EGP/KG | Scrap Value = 0 EGP',
-      status: 'تطبيق قاعدة معيار MVP بدقة 100%',
+      status: 'استيعاب تكلفة المواد بالكامل',
       targetTab: 'production'
     },
     {

@@ -229,8 +229,8 @@ export const InventoryAuditView: React.FC = () => {
   const reportTabs = [
     {
       id: 'balance' as ReportTab,
-      labelAr: 'أرصدة المخزون وحركات الصنف (Sec 29)',
-      labelEn: 'Inventory Balances (Sec 29)',
+      labelAr: 'أرصدة المخزون وحركات الصنف',
+      labelEn: 'Inventory Balances',
       icon: Layers
     },
     {
@@ -241,38 +241,38 @@ export const InventoryAuditView: React.FC = () => {
     },
     {
       id: 'production' as ReportTab,
-      labelAr: 'متابعة أوامر الإنتاج (Sec 31)',
-      labelEn: 'Production Monitoring (Sec 31)',
+      labelAr: 'متابعة أوامر الإنتاج والتشغيل',
+      labelEn: 'Production Monitoring',
       icon: Factory
     },
     {
       id: 'consumption' as ReportTab,
-      labelAr: 'استهلاك المواد وفروقاتها (Sec 32)',
-      labelEn: 'Material Consumption (Sec 32)',
+      labelAr: 'استهلاك المواد وفروقات المعيار',
+      labelEn: 'Material Consumption',
       icon: BarChart3
     },
     {
       id: 'scrap' as ReportTab,
-      labelAr: 'الهالك والسكراب الصناعي (Sec 33)',
-      labelEn: 'Industrial Scrap (Sec 33)',
+      labelAr: 'الهالك والسكراب الصناعي',
+      labelEn: 'Industrial Scrap',
       icon: AlertTriangle
     },
     {
       id: 'landed' as ReportTab,
-      labelAr: 'تكاليف الإنزال (Sec 34)',
-      labelEn: 'Landed Costs (Sec 34)',
+      labelAr: 'تكاليف الشحن والإنزال (Landed Costs)',
+      labelEn: 'Landed Costs',
       icon: DollarSign
     },
     {
       id: 'cost-impact' as ReportTab,
-      labelAr: 'تحليل أثر تكلفة التصنيع (Sec 44 & 48)',
-      labelEn: 'Cost Impact Analysis (Sec 44)',
+      labelAr: 'تحليل أثر تكلفة التصنيع',
+      labelEn: 'Cost Impact Analysis',
       icon: Sparkles
     },
     {
       id: 'audit-log' as ReportTab,
-      labelAr: 'سجل التدقيق الشامل (Sec 35)',
-      labelEn: 'Global Audit Log (Sec 35)',
+      labelAr: 'سجل التدقيق والمطابقة الشامل',
+      labelEn: 'Global Audit Log',
       icon: Shield
     }
   ];

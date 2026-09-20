@@ -57,6 +57,31 @@ import {
   INITIAL_ODOO_LOGS
 } from '../data/initialData';
 import { odooService } from '../services/odooService';
+import { authService } from '../services/authService';
+import {
+  SEED_USERS,
+  SEED_WAREHOUSES,
+  SEED_LOCATIONS,
+  SEED_UOMS,
+  SEED_CURRENCIES,
+  SEED_RAW_MATERIALS,
+  SEED_PRODUCTS,
+  SEED_MACHINES,
+  SEED_SUPPLIERS,
+  SEED_CUSTOMERS,
+  SEED_BOMS,
+  SEED_RECEIPTS,
+  SEED_LANDED_COSTS,
+  SEED_TRANSFERS,
+  SEED_ISSUES,
+  SEED_PRODUCTION_ORDERS,
+  SEED_MATERIAL_ISSUES,
+  SEED_PRODUCTION_RECEIPTS,
+  SEED_CUSTOMER_DELIVERIES,
+  SEED_COST_ADJUSTMENTS,
+  SEED_LEDGER_ENTRIES,
+  SEED_AUDIT_LOGS
+} from '../data/seedData';
 
 interface AppContextType {
   language: Language;
@@ -112,6 +137,7 @@ interface AppContextType {
   addCostAdjustment: (adjustment: Omit<ProductionOrderCostAdjustment, 'id' | 'adjustmentNumber' | 'status' | 'originalProductionCostEGP' | 'revisedProductionCostEGP' | 'quantityProduced' | 'quantityInStock' | 'quantityIssuedOrSold' | 'inventoryAdjustmentEGP' | 'cogsAdjustmentEGP'>) => ProductionOrderCostAdjustment;
   cancelTransaction: (documentType: string, documentNumber: string, reason: string) => void;
   resetToSampleMVP: () => void;
+  seedFullCoverageData: () => void;
 
   // Master Data Add/Update/Delete
   saveRawMaterial: (material: RawMaterial) => void;
@@ -224,6 +250,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { saveStorage('auditLogs', auditLogs); }, [auditLogs]);
   useEffect(() => { saveStorage('odooConfig', odooConfig); }, [odooConfig]);
   useEffect(() => { saveStorage('odooLogs', odooLogs); }, [odooLogs]);
+
+  // Sync to PostgreSQL backend via Drizzle API
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      authService.syncFullStateToBackend({
+        warehouses,
+        locations,
+        uoms,
+        currencies,
+        rawMaterials,
+        products,
+        machines,
+        suppliers,
+        customers,
+        boms,
+        receipts,
+        landedCosts,
+        issues,
+        transfers,
+        productionOrders,
+        materialIssues,
+        productionReceipts,
+        customerDeliveries,
+        costAdjustments,
+        ledgerEntries,
+        auditLogs
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [
+    warehouses,
+    rawMaterials,
+    products,
+    receipts,
+    landedCosts,
+    issues,
+    transfers,
+    productionOrders,
+    materialIssues,
+    productionReceipts,
+    customerDeliveries,
+    costAdjustments,
+    ledgerEntries,
+    auditLogs
+  ]);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
@@ -1351,6 +1422,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('RESET_SYSTEM', 'النظام', 'RESET', 'تمت إعادة ضبط النظام إلى دورة العمل المعيارية النموذجية');
   };
 
+  // 100% Coverage Seeding with All Auth Roles and Master/Transaction entities
+  const seedFullCoverageData = () => {
+    localStorage.clear();
+    setUsers(SEED_USERS);
+    setWarehouses(SEED_WAREHOUSES);
+    setLocations(SEED_LOCATIONS);
+    setUoms(SEED_UOMS);
+    setCurrencies(SEED_CURRENCIES);
+    setRawMaterials(SEED_RAW_MATERIALS);
+    setProducts(SEED_PRODUCTS);
+    setMachines(SEED_MACHINES);
+    setSuppliers(SEED_SUPPLIERS);
+    setCustomers(SEED_CUSTOMERS);
+    setBoms(SEED_BOMS);
+    setReceipts(SEED_RECEIPTS);
+    setLandedCosts(SEED_LANDED_COSTS);
+    setTransfers(SEED_TRANSFERS);
+    setIssues(SEED_ISSUES);
+    setProductionOrders(SEED_PRODUCTION_ORDERS);
+    setMaterialIssues(SEED_MATERIAL_ISSUES);
+    setProductionReceipts(SEED_PRODUCTION_RECEIPTS);
+    setCustomerDeliveries(SEED_CUSTOMER_DELIVERIES);
+    setCostAdjustments(SEED_COST_ADJUSTMENTS);
+    setLedgerEntries(SEED_LEDGER_ENTRIES);
+    setAuditLogs(SEED_AUDIT_LOGS);
+    setOdooConfig(INITIAL_ODOO_CONFIG);
+    setOdooLogs(INITIAL_ODOO_LOGS);
+    logAudit('SEED_FULL_COVERAGE', 'قاعدة البيانات', 'SEED_100', 'تم تحميل بيانات البذر التجريبية بنسبة تغطية 100% لكافة الأدوار والمستودعات والعمليات');
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1360,6 +1461,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser,
         users,
         setUsers,
+        seedFullCoverageData,
         warehouses,
         locations,
         uoms,

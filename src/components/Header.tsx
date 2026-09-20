@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Menu,
   Languages,
@@ -7,9 +7,16 @@ import {
   RefreshCw,
   Clock,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  LogIn,
+  KeyRound,
+  Database,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { AuthModal } from './common/AuthModal';
+import { RBACMatrixModal } from './common/RBACMatrixModal';
+import { authService } from '../services/authService';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -17,8 +24,22 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onOpenWalkthroughModal }) => {
-  const { language, setLanguage, currentUser, setCurrentUser, users, resetToSampleMVP, odooConfig } = useApp();
+  const { language, setLanguage, currentUser, setCurrentUser, users, resetToSampleMVP, seedFullCoverageData, odooConfig } = useApp();
   const isAr = language === 'ar';
+
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [isRBACOpen, setIsRBACOpen] = useState(false);
+  const [backendInfo, setBackendInfo] = useState<{ connected: boolean; postgres: boolean }>({
+    connected: false,
+    postgres: false
+  });
+
+  useEffect(() => {
+    authService.checkBackendStatus().then(status => {
+      setBackendInfo({ connected: status.connected, postgres: status.postgres });
+    });
+  }, []);
 
   const roleLabels: Record<string, { ar: string; en: string; color: string }> = {
     ADMIN: { ar: 'مدير النظام', en: 'System Admin', color: 'bg-rose-50 text-rose-700 border-rose-200' },
@@ -51,15 +72,48 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onOpenWalkthrou
             <span>{isAr ? 'العملة الأساسية: جنيه مصري' : 'Base: Egyptian Pound'}</span>
           </div>
 
-          <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>{isAr ? 'متوسط التكلفة المتحرك' : 'Moving Average Cost'}</span>
+          {/* Backend / PostgreSQL status indicator */}
+          <div
+            title={backendInfo.postgres ? 'Connected to PostgreSQL' : 'Express API Active (PostgreSQL ready on VPS)'}
+            className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border ${
+              backendInfo.postgres
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{backendInfo.postgres ? 'PostgreSQL + Drizzle' : 'Express API + Drizzle'}</span>
           </div>
         </div>
       </div>
 
-      {/* Action Center: Walkthrough, User Switcher, Language Toggle */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      {/* Action Center: RBAC Matrix, Walkthrough, Auth, User Switcher, Language Toggle */}
+      <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* RBAC Info Button */}
+        <button
+          id="btn-view-rbac"
+          onClick={() => setIsRBACOpen(true)}
+          className="hidden md:flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition"
+          title={isAr ? 'عرض مصفوفة الصلاحيات وفصل المهام' : 'View RBAC & Duties Separation'}
+        >
+          <Shield className="w-3.5 h-3.5 text-slate-600" />
+          <span>{isAr ? 'مصفوفة الصلاحيات' : 'RBAC Matrix'}</span>
+        </button>
+
+        {/* JWT Auth Button */}
+        <button
+          id="btn-open-jwt-auth"
+          onClick={() => {
+            setAuthMode('login');
+            setIsAuthOpen(true);
+          }}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition"
+        >
+          <LogIn className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">{isAr ? 'دخول JWT' : 'JWT Sign In'}</span>
+          <span className="sm:hidden">{isAr ? 'دخول' : 'Login'}</span>
+        </button>
+
         {/* Sample MVP Walkthrough Button */}
         {onOpenWalkthroughModal && (
           <button
@@ -68,20 +122,38 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onOpenWalkthrou
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs hover:from-blue-700 hover:to-indigo-700 transition"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{isAr ? 'سيناريو الدورة المعيارية' : 'MVP Flow Demo'}</span>
-            <span className="sm:hidden">{isAr ? 'الدورة' : 'Demo'}</span>
+            <span className="hidden sm:inline">{isAr ? 'دورة التصنيع التفاعلية' : 'Manufacturing Tour'}</span>
+            <span className="sm:hidden">{isAr ? 'الجولة' : 'Tour'}</span>
           </button>
         )}
+
+        {/* 100% Coverage Seed Data Button */}
+        <button
+          id="btn-seed-100-data"
+          onClick={() => {
+            if (confirm(isAr 
+              ? 'هل تريد تحميل بيانات النظام الكاملة بنسبة تغطية 100% لكافة الأدوار والمستخدمين والمستودعات والعمليات؟' 
+              : 'Load 100% complete seed dataset across all roles, users, warehouses and transactions?')) {
+              seedFullCoverageData();
+            }
+          }}
+          title={isAr ? 'تحميل بيانات النظام الشاملة 100%' : 'Load 100% Seed Dataset'}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition"
+        >
+          <Database className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="hidden md:inline">{isAr ? 'بيانات شاملة 100%' : '100% Data'}</span>
+          <span className="md:hidden">100%</span>
+        </button>
 
         {/* Reset Data Button */}
         <button
           id="btn-reset-data"
           onClick={() => {
-            if (confirm(isAr ? 'هل تريد استعادة البيانات المعيارية النموذجية؟' : 'Reset to default sample data?')) {
+            if (confirm(isAr ? 'هل تريد استعادة بيانات النظام الافتراضية؟' : 'Reset to default data?')) {
               resetToSampleMVP();
             }
           }}
-          title={isAr ? 'استعادة بيانات النموذج المعياري' : 'Reset sample data'}
+          title={isAr ? 'استعادة البيانات الافتراضية' : 'Reset data'}
           className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 border border-slate-200 text-xs flex items-center gap-1"
         >
           <RotateCcw className="w-3.5 h-3.5" />
@@ -126,6 +198,18 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onOpenWalkthrou
           </select>
         </div>
       </div>
+
+      {/* Modals */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        mode={authMode}
+      />
+
+      <RBACMatrixModal
+        isOpen={isRBACOpen}
+        onClose={() => setIsRBACOpen(false)}
+      />
     </header>
   );
 };

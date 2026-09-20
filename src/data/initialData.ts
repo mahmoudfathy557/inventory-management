@@ -374,50 +374,93 @@ export const INITIAL_BOMS: BOM[] = [
 ];
 
 export const INITIAL_USERS: User[] = [
+  // 1. System Administrators
   {
     id: 'user-admin',
     username: 'admin',
-    fullName: 'أ. محمود فتحي',
+    fullName: 'أ. محمود فتحي (مدير النظام العام)',
     email: 'mahmoudfathy2424@gmail.com',
     role: UserRole.ADMIN,
     active: true
   },
   {
+    id: 'user-admin-it',
+    username: 'it.admin',
+    fullName: 'م. إبراهيم فؤاد (مسؤول الشبكات والربط)',
+    email: 'it.admin@factory.com',
+    role: UserRole.ADMIN,
+    active: true
+  },
+
+  // 2. Warehouse & Inventory Managers
+  {
     id: 'user-inventory',
     username: 'ahmed.kamal',
-    fullName: 'م. أحمد كمال',
+    fullName: 'م. أحمد كمال (مدير حركة المستودعات)',
     email: 'ahmed.inventory@factory.com',
     role: UserRole.INVENTORY_USER,
     active: true
   },
   {
+    id: 'user-inventory-wh',
+    username: 'yasser.wh',
+    fullName: 'أ. ياسر النجار (أمين مستودع المواد الخام)',
+    email: 'yasser.wh@factory.com',
+    role: UserRole.INVENTORY_USER,
+    active: true
+  },
+
+  // 3. Production Planners & Engineers
+  {
     id: 'user-production',
     username: 'tarek.radwan',
-    fullName: 'م. طارق رضوان',
+    fullName: 'م. طارق رضوان (رئيس مهندسي الإنتاج)',
     email: 'tarek.prod@factory.com',
     role: UserRole.PRODUCTION_USER,
     active: true
   },
   {
+    id: 'user-production-ext',
+    username: 'hassan.ext',
+    fullName: 'م. حسن البدري (مشرف وردية البثق والتصنيع)',
+    email: 'hassan.ext@factory.com',
+    role: UserRole.PRODUCTION_USER,
+    active: true
+  },
+
+  // 4. Quality Control & Assurance (QA/QC)
+  {
     id: 'user-quality',
     username: 'samir.sherif',
-    fullName: 'د. سمير شريف',
+    fullName: 'د. سمير شريف (مدير ضمان الجودة والمطابقة)',
     email: 'samir.quality@factory.com',
     role: UserRole.QUALITY_USER,
     active: true
   },
   {
+    id: 'user-quality-qc',
+    username: 'mona.qc',
+    fullName: 'ك. منى عبد الرحمن (أخصائية الفحص المعملي)',
+    email: 'mona.qc@factory.com',
+    role: UserRole.QUALITY_USER,
+    active: true
+  },
+
+  // 5. Cost Accountants & Financial Controllers
+  {
     id: 'user-finance',
     username: 'khaled.mansour',
-    fullName: 'أ. خالد منصور',
+    fullName: 'أ. خالد منصور (رئيس حسابات التكاليف)',
     email: 'khaled.finance@factory.com',
     role: UserRole.FINANCE_USER,
     active: true
   },
+
+  // 6. Executive Leadership & Strategic Management
   {
     id: 'user-management',
     username: 'director.general',
-    fullName: 'م. أسامة الشرقاوي (المدير التنفيذي)',
+    fullName: 'م. أسامة الشرقاوي (العضو المنتدب والمدير التنفيذي)',
     email: 'director@factory.com',
     role: UserRole.MANAGEMENT_USER,
     active: true
