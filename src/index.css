@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+}
