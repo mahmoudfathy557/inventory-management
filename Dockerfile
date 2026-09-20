@@ -1,5 +1,5 @@
 # Multi-stage production Dockerfile optimized for Coolify / Docker / VPS deployment
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -9,14 +9,17 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 # Copy dependency manifests and .npmrc configuration
 COPY package*.json .npmrc ./
 
-# Copy application source code
+# Install all build dependencies
+RUN npm install --legacy-peer-deps
+
+# Copy application source code (excluding node_modules/dist via .dockerignore)
 COPY . .
 
-# Ensure all dependencies are installed and execute production build
-RUN npm install --legacy-peer-deps && npm run build
+# Execute Vite frontend build and esbuild server compilation
+RUN npm run build
 
 # Production Runner stage
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
