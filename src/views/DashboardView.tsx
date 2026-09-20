@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Boxes,
   TrendingUp,
@@ -12,11 +12,17 @@ import {
   SendHorizontal,
   Clock,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  BarChart3,
+  PieChart as PieChartIcon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { StatusChip } from '../components/common/StatusChip';
+import { DashboardSkeleton } from '../components/common/Skeleton';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
+import { InventoryLevelCharts } from '../components/dashboard/InventoryLevelCharts';
+import { ProductionOrderCharts } from '../components/dashboard/ProductionOrderCharts';
 
 interface DashboardViewProps {
   onNavigate: (tab: any) => void;
@@ -24,6 +30,8 @@ interface DashboardViewProps {
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpenWalkthrough }) => {
+  const { isLoading } = usePerceivedLoading(200);
+  const [activeVisualTab, setActiveVisualTab] = useState<'all' | 'inventory' | 'production'>('all');
   const {
     language,
     rawMaterials,
@@ -82,6 +90,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
       qty
     };
   });
+
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6" id="view-dashboard">
@@ -192,6 +204,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onOpen
             {isAr ? 'قاعدة التكلفة: الهالك بقيمة معيارية صفر' : 'Cost Rule: 0 EGP Valuation'}
           </div>
         </div>
+      </div>
+
+      {/* Interactive Visual Analytics Suite (Recharts Engine) */}
+      <div className="space-y-4" id="dashboard-visual-analytics">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+              <BarChart3 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-900">
+                {isAr ? 'التحليلات البيانية والمراقبة اللحظية (Real-Time Visual Analytics)' : 'Real-Time Visual Analytics & Monitoring'}
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                {isAr ? 'رسوم تفاعلية لمستويات المخزون، نقاط إعادة الطلب، وخط سير أوامر الإنتاج' : 'Interactive visual charts for inventory stock levels & production pipeline'}
+              </p>
+            </div>
+          </div>
+
+          {/* Visual Mode Selector Tabs */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs self-start sm:self-auto">
+            <button
+              onClick={() => setActiveVisualTab('all')}
+              className={`px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1.5 ${
+                activeVisualTab === 'all'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>{isAr ? 'كافة الرسوم البيانية' : 'All Visuals'}</span>
+            </button>
+            <button
+              onClick={() => setActiveVisualTab('inventory')}
+              className={`px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1.5 ${
+                activeVisualTab === 'inventory'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Boxes className="w-3.5 h-3.5" />
+              <span>{isAr ? 'مستويات المخزون' : 'Inventory Levels'}</span>
+            </button>
+            <button
+              onClick={() => setActiveVisualTab('production')}
+              className={`px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1.5 ${
+                activeVisualTab === 'production'
+                  ? 'bg-white text-purple-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Factory className="w-3.5 h-3.5" />
+              <span>{isAr ? 'أوامر الإنتاج' : 'Production Orders'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Presentation */}
+        {(activeVisualTab === 'all' || activeVisualTab === 'inventory') && (
+          <InventoryLevelCharts onNavigate={onNavigate} />
+        )}
+
+        {(activeVisualTab === 'all' || activeVisualTab === 'production') && (
+          <ProductionOrderCharts onNavigate={onNavigate} />
+        )}
       </div>
 
       {/* Operational Status Row */}

@@ -14,7 +14,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, formatNumber, exportToExcel } from '../../utils/formatters';
+import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
 import { StatusChip } from '../common/StatusChip';
 import { ProductionOrder, ProductionOrderStatus } from '../../types';
 
@@ -80,7 +80,7 @@ export const ProductionMonitoringReport: React.FC<ProductionMonitoringReportProp
       o.approvedBy || '-'
     ]);
 
-    exportToExcel(headers, rows, 'Production_Order_Monitoring_Section_31');
+    exportToCSV(headers, rows, 'Production_Order_Monitoring');
   };
 
   return (
@@ -100,10 +100,11 @@ export const ProductionMonitoringReport: React.FC<ProductionMonitoringReportProp
 
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          title={isAr ? 'تصدير أوامر الإنتاج إلى ملف CSV' : 'Export Production Orders to CSV'}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير إكسيل (Excel)' : 'Export Excel'}</span>
+          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
         </button>
       </div>
 

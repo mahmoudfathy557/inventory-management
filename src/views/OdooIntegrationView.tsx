@@ -17,13 +17,26 @@ import {
   AlertCircle,
   ExternalLink,
   Sparkles,
-  Zap
+  Zap,
+  Wifi,
+  WifiOff,
+  Layers,
+  Clock,
+  AlertTriangle,
+  RotateCcw,
+  Trash2,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { BackgroundSyncQueueManager } from '../components/odoo/BackgroundSyncQueueManager';
+import { OdooIntegrationSkeleton } from '../components/common/Skeleton';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { OdooConfig, OdooSyncLog } from '../types';
 
 export const OdooIntegrationView: React.FC = () => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     odooConfig,
@@ -131,6 +144,10 @@ export const OdooIntegrationView: React.FC = () => {
       color: 'sky'
     }
   ];
+
+  if (isLoading) {
+    return <OdooIntegrationSkeleton />;
+  }
 
   return (
     <div className="space-y-6" id="view-odoo-integration">
@@ -337,6 +354,9 @@ export const OdooIntegrationView: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Service Worker Background Sync & Offline Queue Manager */}
+      <BackgroundSyncQueueManager odooConfig={odooConfig} isAr={isAr} />
 
       {/* Sync Audit Trail Logs */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">

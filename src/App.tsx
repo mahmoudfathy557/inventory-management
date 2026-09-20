@@ -63,12 +63,14 @@ const MainAppContent: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header Bar */}
         <Header
+          currentTab={currentTab}
           onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
           onNavigateToAuth={() => setCurrentTab('auth')}
+          onNavigate={(tab) => setCurrentTab(tab)}
         />
 
         {/* Scrollable View Canvas */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* 1. Unauthenticated Gateway Check: If user is not logged in and tries to access dashboard or operational views */}
             {!currentUser && currentTab !== 'auth' ? (

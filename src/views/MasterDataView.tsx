@@ -45,6 +45,8 @@ import { UOMModal } from '../components/master-data/UOMModal';
 import { CurrencyModal } from '../components/master-data/CurrencyModal';
 import { UserModal } from '../components/master-data/UserModal';
 import { ConfirmDeleteModal } from '../components/master-data/ConfirmDeleteModal';
+import { MasterDataSkeleton } from '../components/common/Skeleton';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 export type MasterDataTab =
   | 'raw'
@@ -62,6 +64,7 @@ interface MasterDataViewProps {
 }
 
 export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     rawMaterials,
@@ -150,6 +153,10 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
       onConfirm
     });
   };
+
+  if (isLoading) {
+    return <MasterDataSkeleton />;
+  }
 
   return (
     <div className="space-y-5" id="view-master-data">

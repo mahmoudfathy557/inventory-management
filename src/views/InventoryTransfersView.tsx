@@ -6,16 +6,25 @@ import {
   Ban,
   X,
   Warehouse as WhIcon,
-  HelpCircle
+  HelpCircle,
+  Scan,
+  Camera,
+  WifiOff,
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useOfflineSyncQueue } from '../hooks/useOfflineSyncQueue';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
+import { BarcodeTransferScannerModal } from '../components/inventory/BarcodeTransferScannerModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryTransfer } from '../types';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 export const InventoryTransfersView: React.FC = () => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     transfers,
@@ -25,11 +34,14 @@ export const InventoryTransfersView: React.FC = () => {
     locations,
     rawMaterials,
     products,
-    currentUser
+    currentUser,
+    odooConfig
   } = useApp();
   const isAr = language === 'ar';
+  const { pendingCount, isOnline, triggerSync, isSyncing } = useOfflineSyncQueue(odooConfig);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [printTransfer, setPrintTransfer] = useState<InventoryTransfer | null>(null);
 
   // Form state
@@ -69,6 +81,43 @@ export const InventoryTransfersView: React.FC = () => {
     });
 
     setIsCreateOpen(false);
+  };
+
+  const handleApplyScannerTransfer = (transferData: {
+    fromWarehouseId: string;
+    toWarehouseId: string;
+    toLocationId: string;
+    items: Array<{
+      item: any;
+      quantity: number;
+    }>;
+    reference: string;
+    notes: string;
+  }) => {
+    const today = new Date().toISOString().split('T')[0];
+
+    transferData.items.forEach(scanned => {
+      const uCost = scanned.item.movingAverageCost || 100;
+      const tVal = scanned.quantity * uCost;
+
+      addTransfer({
+        date: today,
+        fromWarehouseId: transferData.fromWarehouseId,
+        fromLocationId: '',
+        toWarehouseId: transferData.toWarehouseId,
+        toLocationId: transferData.toLocationId,
+        itemId: scanned.item.id,
+        itemCode: scanned.item.code,
+        itemName: isAr ? scanned.item.nameAr : scanned.item.nameEn,
+        quantity: scanned.quantity,
+        uom: scanned.item.defaultUOM || 'KG',
+        unitCostEGP: uCost,
+        totalValueEGP: tVal,
+        reference: transferData.reference || 'تحويل تلقائي عبر مسح الباركود',
+        notes: transferData.notes || 'تم مسح الأصناف والكميات عبر كاميرا الباركود',
+        createdBy: currentUser?.fullName || 'Barcode Scanner'
+      });
+    });
   };
 
   const getWhName = (id: string) => {
@@ -194,15 +243,69 @@ export const InventoryTransfersView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          id="btn-new-transfer"
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{isAr ? 'إصدار إذن تحويل مخزني' : 'New Transfer'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-open-barcode-scanner"
+            onClick={() => setIsScannerOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs border border-slate-700 transition"
+            title={isAr ? 'مسح باركود الأصناف عبر الكاميرا' : 'Scan items via Camera Barcode'}
+          >
+            <Camera className="w-4 h-4 text-sky-400" />
+            <span>{isAr ? 'ماسح الباركود (الكاميرا)' : 'Barcode Camera Scan'}</span>
+          </button>
+
+          <button
+            id="btn-new-transfer"
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isAr ? 'إصدار إذن تحويل مخزني' : 'New Transfer'}</span>
+          </button>
+        </div>
       </div>
+
+      {/* Offline Sync Service Worker Status Alert */}
+      {(!isOnline || pendingCount > 0) && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-xl bg-amber-500/20 text-amber-700 shrink-0">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold flex items-center gap-2">
+                <span>
+                  {isAr
+                    ? 'خدمة المزامنة التلقائية في الخلفية (Background Sync Service) نشطة'
+                    : 'Background Sync Service Worker Active'}
+                </span>
+                {!isOnline && (
+                  <span className="px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded text-[10px] font-bold">
+                    {isAr ? 'أوفلاين' : 'Offline'}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-800">
+                {isAr
+                  ? `أي تحويلات مخزنية يتم تسجيلها تُحفظ في قاعدة IndexedDB المحلية وتُزامن مع Odoo stock.picking فور توفر الشبكة (${pendingCount} معلق).`
+                  : `Transfers are preserved locally in IndexedDB and queued for automatic Odoo sync on reconnect (${pendingCount} pending).`}
+              </p>
+            </div>
+          </div>
+
+          {isOnline && pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => triggerSync()}
+              disabled={isSyncing}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 self-end sm:self-auto transition disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? (isAr ? 'جاري المزامنة...' : 'Syncing...') : (isAr ? 'مزامنة الطابور الآن' : 'Sync Queue Now')}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       <DataTable
         id="transfers-table"
@@ -213,6 +316,7 @@ export const InventoryTransfersView: React.FC = () => {
         titleAr="سجل أذونات التحويل بين المواقع"
         titleEn="Stock Transfer Register"
         exportFileName="Stock_Transfers"
+        isLoading={isLoading}
       />
 
       {/* Create Modal */}
@@ -237,9 +341,22 @@ export const InventoryTransfersView: React.FC = () => {
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs">
               {/* Item Selection */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {isAr ? 'الصنف المراد تحويله *' : 'Item to Transfer *'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">
+                    {isAr ? 'الصنف المراد تحويله *' : 'Item to Transfer *'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateOpen(false);
+                      setIsScannerOpen(true);
+                    }}
+                    className="text-sky-600 hover:text-sky-800 font-bold text-[11px] flex items-center gap-1"
+                  >
+                    <Camera className="w-3 h-3" />
+                    <span>{isAr ? 'التحويل عبر مسح الباركود' : 'Use Barcode Scanner'}</span>
+                  </button>
+                </div>
                 <select
                   value={selectedItemId}
                   onChange={e => setSelectedItemId(e.target.value)}
@@ -407,6 +524,13 @@ export const InventoryTransfersView: React.FC = () => {
           ]}
         />
       )}
+
+      {/* Barcode Camera Scanner Integration */}
+      <BarcodeTransferScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onApplyTransfer={handleApplyScannerTransfer}
+      />
     </div>
   );
 };

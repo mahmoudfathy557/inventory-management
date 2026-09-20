@@ -58,6 +58,7 @@ import {
 } from '../data/initialData';
 import { odooService } from '../services/odooService';
 import { authService } from '../services/authService';
+import { offlineSyncQueue } from '../services/offlineSyncQueue';
 import {
   SEED_USERS,
   SEED_WAREHOUSES,
@@ -430,6 +431,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     logAudit('POST_RECEIPT', 'إذن إضافة مخزني', nextNum, `استلام ${data.quantity} ${data.uom} من صنف ${data.itemName} بقيمة ${data.totalValueEGP.toLocaleString('en-US')} ج.م`);
 
+    offlineSyncQueue.enqueueItem({
+      actionType: 'GOODS_RECEIPT',
+      titleAr: `إذن إضافة مخزني: ${data.itemName}`,
+      titleEn: `Goods Receipt: ${data.itemName}`,
+      documentNumber: nextNum,
+      payload: newReceipt,
+      odooModel: 'stock.picking (incoming)',
+      odooOperation: 'odoo_goods_receipt_create'
+    }).catch(err => console.warn('[AppContext] Offline queue error:', err));
+
     return newReceipt;
   };
 
@@ -567,6 +578,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     logAudit('POST_ISSUE', 'إذن صرف مخزني', nextNum, `صرف ${data.quantity} ${data.uom} من صنف ${data.itemName} بقيمة ${data.totalIssueValueEGP.toLocaleString('en-US')} ج.م`);
 
+    offlineSyncQueue.enqueueItem({
+      actionType: 'MATERIAL_ISSUE',
+      titleAr: `إذن صرف مخزني: ${data.itemName}`,
+      titleEn: `Material Issue: ${data.itemName}`,
+      documentNumber: nextNum,
+      payload: newIssue,
+      odooModel: 'stock.picking (internal_issue)',
+      odooOperation: 'odoo_material_issue_create'
+    }).catch(err => console.warn('[AppContext] Offline queue error:', err));
+
     return newIssue;
   };
 
@@ -638,6 +659,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransfers(prev => [newTransfer, ...prev]);
 
     logAudit('POST_TRANSFER', 'تحويل مخزني', nextNum, `تحويل ${data.quantity} ${data.uom} من ${fromWh?.nameAr} إلى ${toWh?.nameAr}`);
+
+    // Queue in Offline Sync Service Worker queue for Odoo synchronization
+    offlineSyncQueue.enqueueItem({
+      actionType: 'STOCK_TRANSFER',
+      titleAr: `تحويل مخزني: ${data.itemName}`,
+      titleEn: `Stock Transfer: ${data.itemName}`,
+      documentNumber: nextNum,
+      payload: {
+        ...newTransfer,
+        fromWarehouseName: fromWh?.nameAr || 'المستودع المصدر',
+        toWarehouseName: toWh?.nameAr || 'مستودع الوجهة'
+      },
+      odooModel: 'stock.picking (internal_transfer)',
+      odooOperation: 'odoo_stock_transfer_create'
+    }).catch(err => console.warn('[AppContext] Offline queue error:', err));
 
     return newTransfer;
   };

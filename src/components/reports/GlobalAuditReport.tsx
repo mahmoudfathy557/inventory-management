@@ -10,7 +10,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { exportToExcel } from '../../utils/formatters';
+import { exportToCSV } from '../../utils/formatters';
 
 export const GlobalAuditReport: React.FC = () => {
   const { language, auditLogs } = useApp();
@@ -50,7 +50,7 @@ export const GlobalAuditReport: React.FC = () => {
       l.details
     ]);
 
-    exportToExcel(headers, rows, 'Global_Audit_Log_Section_35');
+    exportToCSV(headers, rows, 'Global_Audit_Log');
   };
 
   return (
@@ -71,10 +71,11 @@ export const GlobalAuditReport: React.FC = () => {
 
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          title={isAr ? 'تصدير سجل التدقيق إلى ملف CSV' : 'Export Audit Log to CSV'}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير إكسيل (Excel)' : 'Export Excel'}</span>
+          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
         </button>
       </div>
 

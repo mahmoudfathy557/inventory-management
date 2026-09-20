@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="pwa-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="box-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background Rounded Canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#pwa-grad)" />
+
+  <!-- Outer Safe Zone Ring -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" />
+
+  <!-- Industrial Warehouse & Production Matrix Glyph -->
+  <g filter="url(#shadow)" transform="translate(256, 256)">
+    <!-- Isometric Cube 1 (Top Left - Raw Materials) -->
+    <path d="M-60 -110 L0 -145 L60 -110 L0 -75 Z" fill="#7dd3fc" />
+    <path d="M-60 -110 L0 -75 L0 -5 L-60 -40 Z" fill="#0284c7" />
+    <path d="M0 -75 L60 -110 L60 -40 L0 -5 Z" fill="#0369a1" />
+
+    <!-- Isometric Cube 2 (Bottom Left - WIP / Production) -->
+    <path d="M-120 0 L-60 -35 L0 0 L-60 35 Z" fill="#93c5fd" />
+    <path d="M-120 0 L-60 35 L-60 105 L-120 70 Z" fill="#3b82f6" />
+    <path d="M-60 35 L0 0 L0 70 L-60 105 Z" fill="#1d4ed8" />
+
+    <!-- Isometric Cube 3 (Bottom Right - Finished Goods) -->
+    <path d="M0 0 L60 -35 L120 0 L60 35 Z" fill="#38bdf8" />
+    <path d="M0 0 L60 35 L60 105 L0 70 Z" fill="#2563eb" />
+    <path d="M60 35 L120 0 L120 70 L60 105 Z" fill="#1e40af" />
+
+    <!-- Pulse Signal / Smart Logistics Loop -->
+    <circle cx="0" cy="-75" r="7" fill="#fbbf24" />
+    <circle cx="-60" cy="35" r="7" fill="#34d399" />
+    <circle cx="60" cy="35" r="7" fill="#38bdf8" />
+
+    <path d="M0 -68 L-55 30 M0 -68 L55 30 M-50 35 L50 35" stroke="#ffffff" stroke-width="3.5" stroke-dasharray="6 4" stroke-linecap="round" opacity="0.85" />
+  </g>
+
+  <!-- Brand Typography Accent -->
+  <text x="256" y="440" text-anchor="middle" fill="#f8fafc" font-family="system-ui, -apple-system, sans-serif" font-size="34" font-weight="800" letter-spacing="4">REMIX ERP</text>
+  <text x="256" y="468" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600" letter-spacing="2">INVENTORY &amp; PRODUCTION</text>
+</svg>

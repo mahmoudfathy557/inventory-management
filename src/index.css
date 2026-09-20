@@ -5,3 +5,160 @@
     font-variant-numeric: lining-nums tabular-nums;
   }
 }
+
+/* ==========================================================================
+   Screen Defaults for Print Utility Classes
+   ========================================================================== */
+.print-only {
+  display: none !important;
+}
+
+/* ==========================================================================
+   CSS Print Stylesheet for Inventory Audit Reports & Vouchers
+   ========================================================================== */
+@media print {
+  /* Page Sizing and Margins for Industrial Reports */
+  @page {
+    size: A4 landscape;
+    margin: 10mm 10mm 12mm 10mm;
+  }
+
+  /* Reset Root, Body & Containers for Unrestricted Height and Color Fidelity */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html,
+  body,
+  #root,
+  main,
+  #view-inventory-reports {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 9.5pt !important;
+    line-height: 1.35 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Reveal Print-Only Elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Hide All Interactive & Navigation Chrome */
+  .no-print,
+  .no-print *,
+  aside,
+  nav,
+  header,
+  #app-sidebar,
+  #app-header,
+  #sidebar-backdrop,
+  #btn-toggle-sidebar,
+  #auth-required-guard,
+  #rbac-forbidden-guard,
+  button,
+  input,
+  select,
+  textarea,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* Page Break Rules & Anti-Fragmentation */
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-page-break-before {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  .print-page-break-after {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+
+  /* Table Formatting for Hard Copy Printing */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 1rem !important;
+    page-break-inside: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 5px 7px !important;
+    font-size: 8.5pt !important;
+    color: #0f172a !important;
+    background-color: transparent !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    text-align: inherit !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Clean up card containers in print */
+  .border,
+  .rounded-xl,
+  .rounded-2xl {
+    border-color: #cbd5e1 !important;
+    border-radius: 4px !important;
+  }
+
+  /* Ensure numbers and codes are crisp and aligned */
+  .font-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  }
+
+  /* High contrast status chips */
+  .rounded-full {
+    border: 1px solid #94a3b8 !important;
+    padding: 1px 6px !important;
+    font-size: 7.5pt !important;
+    font-weight: 700 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent overflow cutoff on table wrapper divs */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+}
+

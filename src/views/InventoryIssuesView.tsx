@@ -13,8 +13,10 @@ import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryIssue } from '../types';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 export const InventoryIssuesView: React.FC = () => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     issues,
@@ -204,6 +206,7 @@ export const InventoryIssuesView: React.FC = () => {
         titleAr="سجل أذونات الصرف المخزني"
         titleEn="Inventory Issues Register"
         exportFileName="Inventory_Issues"
+        isLoading={isLoading}
       />
 
       {/* Create Modal */}

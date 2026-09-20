@@ -16,10 +16,13 @@ import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
+import { QualityControlSkeleton } from '../components/common/Skeleton';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { ProductionOrder, QualityStatus } from '../types';
 
 export const QualityControlView: React.FC = () => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     productionOrders,
@@ -145,6 +148,10 @@ export const QualityControlView: React.FC = () => {
       )
     }
   ];
+
+  if (isLoading) {
+    return <QualityControlSkeleton />;
+  }
 
   return (
     <div className="space-y-5" id="view-quality-control">

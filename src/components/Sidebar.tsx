@@ -24,6 +24,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { canAccessTab, RBAC_ROLE_DEFINITIONS } from '../utils/rbac';
 import { UserRole } from '../types';
+import { PWAInstallButton } from './common/PWAInstallButton';
 
 export type NavItem =
   | 'dashboard'
@@ -340,6 +341,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
             {isAr ? 'إدارة' : 'Manage'}
           </button>
         </div>
+
+        {/* PWA Install Promotion / Standalone Status */}
+        <PWAInstallButton variant="sidebar" />
 
         {/* User Account & Logout Card */}
         {currentUser ? (

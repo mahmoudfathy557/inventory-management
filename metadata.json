@@ -1,7 +1,9 @@
 {
   "name": "Remix Inventory \u0026 Production Control System",
   "description": "نظام احترافي لإدارة ومراقبة المخزون وأوامر الإنتاج وتكاليف التصنيع وسجلات التدقيق مع تكامل أودو Odoo",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

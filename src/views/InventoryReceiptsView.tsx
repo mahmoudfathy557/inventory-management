@@ -17,12 +17,14 @@ import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryReceipt, ItemType } from '../types';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 interface InventoryReceiptsViewProps {
   onOpenLandedCostModal?: (receiptId: string) => void;
 }
 
 export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ onOpenLandedCostModal }) => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     receipts,
@@ -270,6 +272,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
         titleAr="سجل أذونات الإضافة المخزنية"
         titleEn="Inventory Receipts Ledger"
         exportFileName="Inventory_Receipts"
+        isLoading={isLoading}
       />
 
       {/* Modal: Create Inventory Receipt */}

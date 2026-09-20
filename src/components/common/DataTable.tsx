@@ -35,6 +35,7 @@ interface DataTableProps<T> {
   defaultSortKey?: string;
   defaultSortOrder?: 'asc' | 'desc';
   pageSize?: number;
+  isLoading?: boolean;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -50,7 +51,8 @@ export function DataTable<T extends Record<string, any>>({
   actions,
   defaultSortKey,
   defaultSortOrder = 'desc',
-  pageSize = 10
+  pageSize = 10,
+  isLoading = false
 }: DataTableProps<T>) {
   const { language } = useApp();
   const isAr = language === 'ar';
@@ -144,7 +146,7 @@ export function DataTable<T extends Record<string, any>>({
         </div>
 
         {/* Search and Action Tools */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 no-print">
           <div className="relative min-w-[200px] flex-1 sm:flex-initial">
             <Search className={`w-4 h-4 absolute ${isAr ? 'right-3' : 'left-3'} top-2.5 text-slate-400`} />
             <input
@@ -221,7 +223,26 @@ export function DataTable<T extends Record<string, any>>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {paginatedData.length === 0 ? (
+            {isLoading ? (
+              Array.from({ length: Math.min(pageSize, 6) }).map((_, rowIndex) => (
+                <tr key={`skeleton-row-${rowIndex}`} className="animate-pulse">
+                  {columns.map((col, colIndex) => (
+                    <td
+                      key={`skeleton-col-${col.key}-${colIndex}`}
+                      className={`py-3.5 px-4 whitespace-nowrap ${
+                        col.align === 'center' ? 'text-center' : col.align === 'left' ? 'text-left' : 'text-right'
+                      }`}
+                    >
+                      <div
+                        className={`h-4 bg-slate-200/70 rounded-md inline-block ${
+                          colIndex === 0 ? 'w-24' : colIndex === columns.length - 1 ? 'w-16' : 'w-28'
+                        }`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : paginatedData.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="text-center py-10 text-slate-400">
                   {isAr ? 'لا توجد سجلات مطابقة للبحث' : 'No matching records found'}
@@ -249,7 +270,7 @@ export function DataTable<T extends Record<string, any>>({
 
       {/* Pagination Footer */}
       {totalPages > 1 && (
-        <div className="p-3 border-t border-slate-200 flex items-center justify-between bg-slate-50/50 text-xs">
+        <div className="p-3 border-t border-slate-200 flex items-center justify-between bg-slate-50/50 text-xs no-print">
           <span className="text-slate-500">
             {isAr
               ? `صفحة ${currentPage} من ${totalPages} (${sortedData.length} سجل)`

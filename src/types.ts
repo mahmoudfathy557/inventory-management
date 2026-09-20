@@ -581,3 +581,62 @@ export interface OdooSyncLog {
   status: 'SUCCESS' | 'WARNING' | 'FAILED';
   details: string;
 }
+
+export type NotificationType = 'INVENTORY_ALERT' | 'PRODUCTION_MILESTONE' | 'QUALITY_ALERT' | 'COST_ALERT' | 'SYSTEM' | 'BACKGROUND_SYNC';
+export type NotificationSeverity = 'INFO' | 'SUCCESS' | 'WARNING' | 'CRITICAL';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  titleAr: string;
+  titleEn: string;
+  messageAr: string;
+  messageEn: string;
+  timestamp: string;
+  targetTab?: string;
+  targetId?: string;
+  read: boolean;
+  roleTarget?: UserRole[];
+  actionLabelAr?: string;
+  actionLabelEn?: string;
+}
+
+// ==========================================
+// BACKGROUND SYNC & OFFLINE QUEUE DATA TYPES
+// ==========================================
+export type OfflineSyncActionType =
+  | 'STOCK_TRANSFER'
+  | 'GOODS_RECEIPT'
+  | 'MATERIAL_ISSUE'
+  | 'PRODUCTION_RECEIPT'
+  | 'CUSTOMER_DELIVERY'
+  | 'COST_ADJUSTMENT';
+
+export type OfflineSyncStatus = 'QUEUED' | 'SYNCING' | 'SYNCED' | 'FAILED';
+
+export interface QueuedSyncItem {
+  id: string;
+  actionType: OfflineSyncActionType;
+  titleAr: string;
+  titleEn: string;
+  documentNumber: string;
+  payload: any;
+  queuedAt: string;
+  status: OfflineSyncStatus;
+  retryCount: number;
+  maxRetries: number;
+  lastAttemptAt?: string;
+  syncedAt?: string;
+  error?: string;
+  odooModel: string; // e.g., 'stock.picking', 'stock.quant', 'mrp.production'
+  odooOperation: string;
+}
+
+export interface SyncQueueStats {
+  total: number;
+  queued: number;
+  syncing: number;
+  synced: number;
+  failed: number;
+}

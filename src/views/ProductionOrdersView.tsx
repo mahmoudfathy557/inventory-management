@@ -28,6 +28,8 @@ import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { ProductionOrderModificationModal } from '../components/production/ProductionOrderModificationModal';
 import { ProductionOrderDetailModal } from '../components/production/ProductionOrderDetailModal';
 import { ProductionCostImpactReport } from '../components/reports/ProductionCostImpactReport';
+import { ProductionOrdersSkeleton } from '../components/common/Skeleton';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import {
   ProductionOrder,
@@ -43,6 +45,7 @@ interface ProductionOrdersViewProps {
 }
 
 export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNavigateToQuality, initialTab = 'orders' }) => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     productionOrders,
@@ -522,6 +525,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
             titleAr="سجل أوامر الإنتاج والتصنيع"
             titleEn="Production Orders Register"
             exportFileName="Production_Orders"
+            isLoading={isLoading}
           />
         </>
       ) : (

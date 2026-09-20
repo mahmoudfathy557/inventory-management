@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   FileSpreadsheet,
+  Printer,
   Search,
   Filter,
   Eye,
@@ -13,8 +14,9 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, formatNumber, exportToExcel } from '../../utils/formatters';
+import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
 import { ItemType, TransactionType } from '../../types';
+import { PrintPreviewModal, PrintPreviewColumn, PrintPreviewSummaryItem } from '../common/PrintPreviewModal';
 
 interface InventoryBalanceRow {
   itemId: string;
@@ -51,6 +53,7 @@ export const InventoryBalanceReport: React.FC = () => {
   const [selectedType, setSelectedType] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [drillDownItem, setDrillDownItem] = useState<{ id: string; name: string; code: string } | null>(null);
+  const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
 
   // Compute balance rows for each item and warehouse combination
   const balanceRows: InventoryBalanceRow[] = useMemo(() => {
@@ -222,7 +225,7 @@ export const InventoryBalanceReport: React.FC = () => {
       r.closingValue
     ]);
 
-    exportToExcel(headers, rows, 'Inventory_Balance_Report_Section_29');
+    exportToCSV(headers, rows, 'Inventory_Balance_Report');
   };
 
   // Drilldown entries for selected item
@@ -246,19 +249,28 @@ export const InventoryBalanceReport: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 no-print">
+          <button
+            id="btn-print-inventory-balance"
+            onClick={() => setShowPrintPreview(true)}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-blue-400" />
+            <span>{isAr ? 'طباعة الكشف' : 'Print Balance'}</span>
+          </button>
           <button
             onClick={handleExport}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+            title={isAr ? 'تصدير أرصدة المخزون إلى ملف CSV' : 'Export Inventory Balances to CSV'}
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>{isAr ? 'تصدير إكسيل (Excel)' : 'Export Excel'}</span>
+            <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
           </button>
         </div>
       </div>
 
       {/* KPI Highlights */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print-avoid-break">
         <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
           <div className="text-[11px] text-slate-500 font-medium">{isAr ? 'عدد السجلات المعروضة' : 'Displayed Items'}</div>
           <div className="text-lg font-mono font-bold text-slate-800">{filteredRows.length}</div>
@@ -274,7 +286,7 @@ export const InventoryBalanceReport: React.FC = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-wrap items-center gap-2.5 bg-white p-3 rounded-xl border border-slate-200 text-xs">
+      <div className="flex flex-wrap items-center gap-2.5 bg-white p-3 rounded-xl border border-slate-200 text-xs no-print">
         <div className="flex-1 min-w-[200px] relative">
           <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -337,7 +349,7 @@ export const InventoryBalanceReport: React.FC = () => {
                 <th className="p-2.5 font-bold font-mono text-slate-900 bg-slate-100">{isAr ? 'الرصيد الختامي' : 'Closing Qty'}</th>
                 <th className="p-2.5 text-slate-800">{isAr ? 'متوسط التكلفة' : 'MAC'}</th>
                 <th className="p-2.5 font-bold text-emerald-800">{isAr ? 'القيمة الختامية' : 'Closing Value'}</th>
-                <th className="p-2.5 text-center">{isAr ? 'تدقيق' : 'Audit'}</th>
+                <th className="p-2.5 text-center no-print">{isAr ? 'تدقيق' : 'Audit'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -374,7 +386,7 @@ export const InventoryBalanceReport: React.FC = () => {
                   <td className="p-2.5 font-mono font-bold text-emerald-700">
                     {formatCurrency(r.closingValue, language)}
                   </td>
-                  <td className="p-2.5 text-center">
+                  <td className="p-2.5 text-center no-print">
                     <button
                       onClick={() => setDrillDownItem({ id: r.itemId, name: r.itemName, code: r.itemCode })}
                       className="p-1 rounded text-blue-600 hover:bg-blue-50 transition"
@@ -482,6 +494,70 @@ export const InventoryBalanceReport: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Dedicated Print Preview Modal for Inventory Balances */}
+      <PrintPreviewModal
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        reportTitleAr="تقرير أرصدة المخزون والحركة التفصيلية (Section 29)"
+        reportTitleEn="Inventory Balance & Detailed Movements Report (Section 29)"
+        reportSubtitleAr="كشف رسمي معتمد بالأرصدة الافتتاحية، حركات الوارد والمنصرف، الاستهلاك الصناعي ومتوسط التكلفة المتحرك (MAC)"
+        reportSubtitleEn="Certified Official Statement of Opening Balances, Receipts, Issues, Industrial Consumption & MAC Valuation"
+        documentNumber={`INV-BAL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`}
+        categoryLabelAr={selectedWarehouse === 'ALL' ? 'كافة المستودعات والصالات' : warehouses.find(w => w.id === selectedWarehouse)?.nameAr}
+        categoryLabelEn={selectedWarehouse === 'ALL' ? 'All Warehouses' : warehouses.find(w => w.id === selectedWarehouse)?.nameEn}
+        filterScopeAr={`المستودع: ${selectedWarehouse === 'ALL' ? 'الكل' : warehouses.find(w => w.id === selectedWarehouse)?.nameAr} | النوع: ${selectedType === 'ALL' ? 'كافة الأصناف' : selectedType}`}
+        filterScopeEn={`Warehouse: ${selectedWarehouse === 'ALL' ? 'All' : warehouses.find(w => w.id === selectedWarehouse)?.nameEn} | Type: ${selectedType}`}
+        summaryCards={[
+          { labelAr: 'عدد السجلات المعروضة', labelEn: 'Items Count', value: filteredRows.length, isNumber: true, variant: 'default' },
+          { labelAr: 'إجمالي الكميات الختامية', labelEn: 'Total Closing Qty', value: `${formatNumber(totalClosingQty, language)} كجم`, variant: 'info' },
+          { labelAr: 'إجمالي القيمة التقديرية للرصيد', labelEn: 'Total Valuation', value: totalClosingValue, isCurrency: true, variant: 'success' },
+          { labelAr: 'المستودعات المشمولة', labelEn: 'Warehouses In Scope', value: selectedWarehouse === 'ALL' ? warehouses.length : 1, isNumber: true, variant: 'default' }
+        ]}
+        financialSummary={[
+          { labelAr: 'إجمالي قيمة المخزون الدفتري', labelEn: 'Total Book Value', value: totalClosingValue },
+          { labelAr: 'إجمالي كمية المخزون الفعلي', labelEn: 'Total Physical Stock Qty', value: totalClosingQty }
+        ]}
+        notes={
+          isAr
+            ? 'تم إعداد هذا التقرير آلياً وفقاً لمعيار المحاسبة المصري رقم (2) وتدقيق متوسط التكلفة المتحرك مع كل حركة إضافة جديدة للمخازن.'
+            : 'Generated in compliance with EAS 2 / IAS 2 standard with real-time Moving Average Costing (MAC) recalculated per receipt.'
+        }
+        columns={[
+          { key: 'code', headerAr: 'كود الصنف', headerEn: 'Item Code', isMono: true, width: '90px' },
+          { key: 'name', headerAr: 'اسم الصنف والمواصفة', headerEn: 'Item Name' },
+          { key: 'wh', headerAr: 'المستودع', headerEn: 'Warehouse' },
+          { key: 'uom', headerAr: 'الوحدة', headerEn: 'UOM', align: 'center', width: '50px' },
+          { key: 'in', headerAr: 'وارد مشتريات', headerEn: 'Purch Receipts', align: 'right', isMono: true },
+          { key: 'trIn', headerAr: 'تحويل وارد', headerEn: 'Transfer In', align: 'right', isMono: true },
+          { key: 'prodIn', headerAr: 'وارد إنتاج', headerEn: 'Prod Receipts', align: 'right', isMono: true },
+          { key: 'out', headerAr: 'صرف وتسليم', headerEn: 'Issues/Deliv', align: 'right', isMono: true },
+          { key: 'trOut', headerAr: 'تحويل منصرف', headerEn: 'Transfer Out', align: 'right', isMono: true },
+          { key: 'prodCons', headerAr: 'استهلاك تشغيل', headerEn: 'Consumption', align: 'right', isMono: true },
+          { key: 'scrap', headerAr: 'هالك', headerEn: 'Scrap', align: 'right', isMono: true },
+          { key: 'closing', headerAr: 'الرصيد الختامي', headerEn: 'Closing Qty', align: 'right', isMono: true },
+          { key: 'mac', headerAr: 'متوسط التكلفة', headerEn: 'MAC (EGP)', align: 'right', isMono: true },
+          { key: 'value', headerAr: 'قيمة الرصيد (ج.م)', headerEn: 'Total Value', align: 'right', isMono: true }
+        ]}
+        rows={filteredRows.map(r => [
+          r.itemCode,
+          r.itemName,
+          r.warehouseName,
+          r.uom,
+          formatNumber(r.receiptsQty, language),
+          formatNumber(r.transfersInQty, language),
+          formatNumber(r.productionReceiptsQty, language),
+          formatNumber(r.issuesQty, language),
+          formatNumber(r.transfersOutQty, language),
+          formatNumber(r.productionConsumptionQty, language),
+          formatNumber(r.scrapQty, language),
+          formatNumber(r.closingQty, language),
+          formatCurrency(r.movingAverageCost, language),
+          formatCurrency(r.closingValue, language)
+        ])}
+        onExportCSV={handleExport}
+        defaultOrientation="landscape"
+      />
     </div>
   );
 };

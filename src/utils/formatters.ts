@@ -23,12 +23,13 @@ export const formatNumber = (num: number, _lang: Language = 'ar', decimals = 2):
 };
 
 /**
- * Exports data to a CSV file with UTF-8 BOM (\uFEFF)
- * Guarantees Arabic text opens crystal-clean in Microsoft Excel without corruption
+ * Exports tabular data directly to a standard CSV file with UTF-8 BOM (\uFEFF)
+ * Guarantees Arabic text opens crystal-clean in Microsoft Excel, Google Sheets, and data tools without encoding corruption.
  */
-export const exportToExcel = (headers: string[], rows: (string | number)[][], filename: string) => {
-  const escapeCell = (val: string | number) => {
-    const stringVal = String(val ?? '').replace(/"/g, '""');
+export const exportToCSV = (headers: string[], rows: (string | number | boolean | null | undefined)[][], filename: string) => {
+  const escapeCell = (val: string | number | boolean | null | undefined) => {
+    if (val === null || val === undefined) return '""';
+    const stringVal = String(val).replace(/"/g, '""');
     return `"${stringVal}"`;
   };
 
@@ -41,12 +42,15 @@ export const exportToExcel = (headers: string[], rows: (string | number)[][], fi
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_\-\u0600-\u06FF]/g, '_');
+  link.setAttribute('download', `${sanitizedFilename}_${new Date().toISOString().split('T')[0]}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+export const exportToExcel = exportToCSV;
 
 export const triggerPrint = () => {
   window.print();

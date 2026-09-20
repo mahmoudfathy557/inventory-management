@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Shield, KeyRound, Mail, User as UserIcon, Lock, CheckCircle2, AlertCircle, Sparkles, Building2 } from 'lucide-react';
 import { UserRole } from '../../types';
 import { RBAC_ROLE_DEFINITIONS } from '../../utils/rbac';
@@ -72,8 +73,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, mode: ini
     setPassword('Password123!');
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 text-white text-center relative">
@@ -339,6 +340,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, mode: ini
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

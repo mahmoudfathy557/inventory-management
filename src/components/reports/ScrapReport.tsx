@@ -8,7 +8,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, formatNumber, exportToExcel } from '../../utils/formatters';
+import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
 
 export const ScrapReport: React.FC = () => {
   const { language, productionReceipts, ledgerEntries } = useApp();
@@ -76,7 +76,7 @@ export const ScrapReport: React.FC = () => {
       isAr ? 'قاعدة MVP: الهالك بقيمة معيارية = 0 ج.م' : 'MVP Rule: 0 EGP valuation'
     ]);
 
-    exportToExcel(headers, rows, 'Scrap_Report_Section_33');
+    exportToCSV(headers, rows, 'Scrap_and_Waste_Report');
   };
 
   return (
@@ -96,10 +96,11 @@ export const ScrapReport: React.FC = () => {
 
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          title={isAr ? 'تصدير بيانات الهالك إلى ملف CSV' : 'Export Scrap Data to CSV'}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير إكسيل (Excel)' : 'Export Excel'}</span>
+          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
         </button>
       </div>
 

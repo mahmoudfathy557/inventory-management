@@ -10,7 +10,7 @@ import {
   SendHorizontal
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, formatNumber, exportToExcel } from '../../utils/formatters';
+import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
 
 export const ProductionCostImpactReport: React.FC = () => {
   const { language, costAdjustments, productionOrders, customerDeliveries } = useApp();
@@ -112,7 +112,7 @@ export const ProductionCostImpactReport: React.FC = () => {
       r.approver
     ]);
 
-    exportToExcel(headers, rows, 'Production_Cost_Impact_Analysis_Section_44');
+    exportToCSV(headers, rows, 'Production_Cost_Impact_Analysis');
   };
 
   return (
@@ -133,10 +133,11 @@ export const ProductionCostImpactReport: React.FC = () => {
 
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          title={isAr ? 'تصدير تحليل أثر التكلفة إلى ملف CSV' : 'Export Cost Impact Analysis to CSV'}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير إكسيل (Excel)' : 'Export Excel'}</span>
+          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
         </button>
       </div>
 

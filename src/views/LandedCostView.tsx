@@ -16,12 +16,14 @@ import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { LandedCost } from '../types';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 interface LandedCostViewProps {
   preselectedReceiptId?: string;
 }
 
 export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedReceiptId }) => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     landedCosts,
@@ -234,6 +236,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
         titleAr="سجل أذونات تكاليف الإنزال المعتمدة"
         titleEn="Landed Cost Register"
         exportFileName="Landed_Costs"
+        isLoading={isLoading}
       />
 
       {/* Create Modal */}

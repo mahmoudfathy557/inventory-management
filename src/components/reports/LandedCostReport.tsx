@@ -8,7 +8,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, formatNumber, exportToExcel } from '../../utils/formatters';
+import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
 
 export const LandedCostReport: React.FC = () => {
   const { language, landedCosts, receipts } = useApp();
@@ -85,7 +85,7 @@ export const LandedCostReport: React.FC = () => {
       r.user
     ]);
 
-    exportToExcel(headers, rows, 'Landed_Cost_Report_Section_34');
+    exportToCSV(headers, rows, 'Landed_Cost_Report');
   };
 
   return (
@@ -105,10 +105,11 @@ export const LandedCostReport: React.FC = () => {
 
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          title={isAr ? 'تصدير تكاليف الإنزال إلى ملف CSV' : 'Export Landed Costs to CSV'}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير إكسيل (Excel)' : 'Export Excel'}</span>
+          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
         </button>
       </div>
 

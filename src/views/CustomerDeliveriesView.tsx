@@ -15,8 +15,10 @@ import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { CustomerDelivery } from '../types';
+import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 export const CustomerDeliveriesView: React.FC = () => {
+  const { isLoading } = usePerceivedLoading(180);
   const {
     language,
     customerDeliveries,
@@ -243,6 +245,7 @@ export const CustomerDeliveriesView: React.FC = () => {
         titleAr="سجل أذونات تسليم العملاء"
         titleEn="Customer Deliveries Register"
         exportFileName="Customer_Deliveries"
+        isLoading={isLoading}
       />
 
       {/* Modal: Create Delivery */}
