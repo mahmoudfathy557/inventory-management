@@ -17,11 +17,8 @@ RUN npm install --legacy-peer-deps
 # Copy application source code (excluding node_modules/dist via .dockerignore)
 COPY . .
 
-# Execute Vite frontend build
-RUN npm run build:client
-
-# Bundle production Express server
-RUN npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs
+# Execute Vite frontend build and esbuild server compilation
+RUN npm run build
 
 # Production Runner stage
 FROM node:22-slim AS runner
