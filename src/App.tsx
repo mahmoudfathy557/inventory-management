@@ -9,6 +9,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar, NavItem } from './components/Sidebar';
 import { Header } from './components/Header';
 import { WalkthroughModal } from './components/common/WalkthroughModal';
+import { ConfirmProvider } from './components/common/ConfirmDialog';
 import { canAccessTab, RBAC_ROLE_DEFINITIONS } from './utils/rbac';
 
 // Views
@@ -198,7 +199,9 @@ const MainAppContent: React.FC = () => {
 export default function App() {
   return (
     <AppProvider>
-      <MainAppContent />
+      <ConfirmProvider>
+        <MainAppContent />
+      </ConfirmProvider>
     </AppProvider>
   );
 }

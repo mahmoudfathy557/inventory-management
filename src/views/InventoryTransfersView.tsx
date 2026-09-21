@@ -14,6 +14,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useConfirm } from '../components/common/ConfirmDialog';
 import { useOfflineSyncQueue } from '../hooks/useOfflineSyncQueue';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
@@ -37,6 +38,7 @@ export const InventoryTransfersView: React.FC = () => {
     currentUser,
     odooConfig
   } = useApp();
+  const confirm = useConfirm();
   const isAr = language === 'ar';
   const { pendingCount, isOnline, triggerSync, isSyncing } = useOfflineSyncQueue(odooConfig);
 
@@ -213,8 +215,15 @@ export const InventoryTransfersView: React.FC = () => {
           </button>
           {t.status === 'POSTED' && (
             <button
-              onClick={() => {
-                if (confirm(isAr ? 'هل تريد إلغاء وعكس إذن التحويل هذا؟' : 'Cancel this transfer?')) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
+                  message: isAr ? 'هل تريد إلغاء وعكس إذن التحويل هذا؟' : 'Cancel this transfer?',
+                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
+                  icon: Ban,
+                  variant: 'danger',
+                });
+                if (ok) {
                   cancelTransaction('إذن تحويل مخزني', t.transferNumber, 'إلغاء أمر تحويل');
                 }
               }}

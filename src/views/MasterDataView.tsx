@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useConfirm } from '../components/common/ConfirmDialog';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import {
   RawMaterial,
@@ -44,7 +45,6 @@ import { PartnerModal } from '../components/master-data/PartnerModal';
 import { UOMModal } from '../components/master-data/UOMModal';
 import { CurrencyModal } from '../components/master-data/CurrencyModal';
 import { UserModal } from '../components/master-data/UserModal';
-import { ConfirmDeleteModal } from '../components/master-data/ConfirmDeleteModal';
 import { MasterDataSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
@@ -90,6 +90,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
     deleteCurrency,
     deleteUser
   } = useApp();
+  const confirm = useConfirm();
 
   const isAr = language === 'ar';
   const [activeSubTab, setActiveSubTab] = useState<MasterDataTab>(initialTab || 'raw');
@@ -129,28 +130,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  // Deletion confirm state
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    itemName: string;
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    itemName: '',
-    onConfirm: () => {}
-  });
-
   const triggerDelete = (title: string, message: string, itemName: string, onConfirm: () => void) => {
-    setDeleteConfirm({
-      isOpen: true,
+    void confirm({
       title,
       message,
       itemName,
-      onConfirm
+      confirmLabel: isAr ? 'تأكيد الحذف' : 'Confirm Delete',
+      variant: 'danger',
+    }).then(ok => {
+      if (ok) onConfirm();
     });
   };
 
@@ -1261,14 +1249,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
         onClose={() => { setIsUserModalOpen(false); setSelectedUser(null); }}
       />
 
-      <ConfirmDeleteModal
-        isOpen={deleteConfirm.isOpen}
-        title={deleteConfirm.title}
-        message={deleteConfirm.message}
-        itemName={deleteConfirm.itemName}
-        onConfirm={deleteConfirm.onConfirm}
-        onClose={() => setDeleteConfirm(prev => ({ ...prev, isOpen: false }))}
-      />
+
     </div>
   );
 };

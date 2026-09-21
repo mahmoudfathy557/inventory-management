@@ -8,6 +8,7 @@ import {
   AlertOctagon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useConfirm } from '../components/common/ConfirmDialog';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
@@ -27,6 +28,7 @@ export const InventoryIssuesView: React.FC = () => {
     products,
     currentUser
   } = useApp();
+  const confirm = useConfirm();
   const isAr = language === 'ar';
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -157,8 +159,15 @@ export const InventoryIssuesView: React.FC = () => {
           </button>
           {i.status === 'POSTED' && (
             <button
-              onClick={() => {
-                if (confirm(isAr ? 'هل تريد إلغاء وعكس إذن الصرف هذا؟' : 'Cancel this issue?')) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
+                  message: isAr ? 'هل تريد إلغاء وعكس إذن الصرف هذا؟' : 'Cancel this issue?',
+                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
+                  icon: Ban,
+                  variant: 'danger',
+                });
+                if (ok) {
                   cancelTransaction('إذن صرف مخزني', i.issueNumber, 'إلغاء إذن صرف');
                 }
               }}

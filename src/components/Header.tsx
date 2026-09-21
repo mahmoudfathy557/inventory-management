@@ -11,6 +11,7 @@ import {
   Coins
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useConfirm } from './common/ConfirmDialog';
 import { NavItem } from './Sidebar';
 import { GlobalSearchModal } from './common/GlobalSearchModal';
 import { NotificationCenter } from './common/NotificationCenter';
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate
 }) => {
   const { language, setLanguage, currentUser, logout } = useApp();
+  const confirm = useConfirm();
   const isAr = language === 'ar';
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -196,14 +198,17 @@ export const Header: React.FC<HeaderProps> = ({
 
                   <button
                     id="btn-header-logout"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          isAr
-                            ? `هل تريد بالتأكيد تسجيل الخروج (${currentUser.fullName})؟`
-                            : `Are you sure you want to log out (${currentUser.fullName})?`
-                        )
-                      ) {
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: isAr ? 'تسجيل الخروج' : 'Sign Out',
+                        message: isAr
+                          ? `هل تريد بالتأكيد تسجيل الخروج (${currentUser.fullName})؟`
+                          : `Are you sure you want to log out (${currentUser.fullName})?`,
+                        confirmLabel: isAr ? 'خروج' : 'Logout',
+                        icon: LogOut,
+                        variant: 'danger',
+                      });
+                      if (ok) {
                         logout();
                         if (onNavigateToAuth) onNavigateToAuth();
                       }
@@ -271,20 +276,23 @@ export const Header: React.FC<HeaderProps> = ({
 
                 <button
                   type="button"
-                  id="btn-mobile-sheet-logout"
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    if (
-                      confirm(
-                        isAr
+                    id="btn-mobile-sheet-logout"
+                    onClick={async () => {
+                      setIsMobileMenuOpen(false);
+                      const ok = await confirm({
+                        title: isAr ? 'تسجيل الخروج' : 'Sign Out',
+                        message: isAr
                           ? `هل تريد بالتأكيد تسجيل الخروج (${currentUser.fullName})؟`
-                          : `Are you sure you want to log out (${currentUser.fullName})?`
-                      )
-                    ) {
-                      logout();
-                      if (onNavigateToAuth) onNavigateToAuth();
-                    }
-                  }}
+                          : `Are you sure you want to log out (${currentUser.fullName})?`,
+                        confirmLabel: isAr ? 'خروج' : 'Logout',
+                        icon: LogOut,
+                        variant: 'danger',
+                      });
+                      if (ok) {
+                        logout();
+                        if (onNavigateToAuth) onNavigateToAuth();
+                      }
+                    }}
                   className="px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer transition"
                 >
                   <LogOut className="w-3.5 h-3.5" />

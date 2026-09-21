@@ -10,6 +10,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useConfirm } from '../components/common/ConfirmDialog';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
@@ -29,6 +30,7 @@ export const CustomerDeliveriesView: React.FC = () => {
     customers,
     currentUser
   } = useApp();
+  const confirm = useConfirm();
   const isAr = language === 'ar';
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -196,8 +198,15 @@ export const CustomerDeliveriesView: React.FC = () => {
           </button>
           {d.status === 'POSTED' && (
             <button
-              onClick={() => {
-                if (confirm(isAr ? 'هل تريد إلغاء وعكس إذن التسليم هذا؟' : 'Cancel this delivery note?')) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
+                  message: isAr ? 'هل تريد إلغاء وعكس إذن التسليم هذا؟' : 'Cancel this delivery note?',
+                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
+                  icon: Ban,
+                  variant: 'danger',
+                });
+                if (ok) {
                   cancelTransaction('إذن تسليم عميل', d.deliveryNumber, 'إلغاء إذن تسليم عميل وعكس المخزون');
                 }
               }}

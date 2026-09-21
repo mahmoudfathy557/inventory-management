@@ -22,6 +22,7 @@ import {
   X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useConfirm } from './common/ConfirmDialog';
 import { canAccessTab, RBAC_ROLE_DEFINITIONS } from '../utils/rbac';
 import { UserRole } from '../types';
 import { PWAInstallButton } from './common/PWAInstallButton';
@@ -68,6 +69,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isOpen, setIsOpen }) => {
   const { language, productionOrders, odooConfig, currentUser, logout } = useApp();
+  const confirm = useConfirm();
   const isAr = language === 'ar';
 
   const pendingQualityCount = productionOrders.filter(
@@ -372,8 +374,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
               </button>
               <button
                 id="sidebar-btn-logout"
-                onClick={() => {
-                  if (confirm(isAr ? `هل تريد تسجيل خروج ${currentUser.fullName}؟` : `Sign out ${currentUser.fullName}?`)) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: isAr ? 'تسجيل الخروج' : 'Sign Out',
+                    message: isAr ? `هل تريد تسجيل خروج ${currentUser.fullName}؟` : `Sign out ${currentUser.fullName}?`,
+                    confirmLabel: isAr ? 'خروج' : 'Sign out',
+                    icon: LogOut,
+                    variant: 'danger',
+                  });
+                  if (ok) {
                     logout();
                     setCurrentTab('auth');
                   }
