@@ -33,6 +33,34 @@ export function isDbConnected(): boolean {
   return isConnected;
 }
 
+export async function checkDatabase(timeoutMs = 3000): Promise<boolean> {
+  const client = sqlClient;
+  if (!client) return false;
+  try {
+    await Promise.race([
+      client`SELECT 1`,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Database health check timed out')), timeoutMs)
+      ),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function closeDatabase(): Promise<void> {
+  const client = sqlClient;
+  if (!client) return;
+  try {
+    await client.end({ timeout: 5 });
+  } finally {
+    sqlClient = null;
+    dbInstance = null;
+    isConnected = false;
+  }
+}
+
 export async function initDatabase() {
   const db = getDb();
   if (!db || !sqlClient) {

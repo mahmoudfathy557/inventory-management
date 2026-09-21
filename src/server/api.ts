@@ -10,7 +10,11 @@ import { UserRole, User } from '../types.ts';
 import { RBAC_ROLE_DEFINITIONS, getEffectivePermissions } from '../utils/rbac.ts';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_please_change_in_production_32_chars_min';
+const JWT_SECRET =
+  process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-only-insecure-jwt-secret');
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required in production');
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // Seed default accounts in memory or database
