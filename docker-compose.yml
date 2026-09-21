@@ -43,6 +43,7 @@ services:
       start_period: 15s
     networks:
       - inventory_network
+      - coolify
 
 volumes:
   postgres_data:
@@ -51,4 +52,6 @@ volumes:
 networks:
   inventory_network:
     driver: bridge
+  coolify:
+    external: true
 
