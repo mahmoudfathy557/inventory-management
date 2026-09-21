@@ -38,7 +38,7 @@ RUN npm install --omit=dev --legacy-peer-deps
 COPY --from=builder /app/dist ./dist
 
 # Expose production application port
-EXPOSE 3000
+EXPOSE 8082
 
 # Launch bundled production Express server
 CMD ["node", "dist/server.cjs"]
