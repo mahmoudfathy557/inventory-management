@@ -26,7 +26,7 @@ FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8082
 
 # Copy package manifests and optional .npmrc configuration
 COPY package*.json .npmrc* ./
