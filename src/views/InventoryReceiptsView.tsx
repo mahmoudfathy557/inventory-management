@@ -9,7 +9,8 @@ import {
   X,
   CheckCircle,
   HelpCircle,
-  Calculator
+  Calculator,
+  ArrowRightLeft
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
@@ -18,6 +19,7 @@ import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryReceipt, ItemType } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
+import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 
 interface InventoryReceiptsViewProps {
   onOpenLandedCostModal?: (receiptId: string) => void;
@@ -35,6 +37,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
     warehouses,
     suppliers,
     currencies,
+    uoms,
     currentUser,
     getExchangeRateForDate
   } = useApp();
@@ -53,6 +56,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
   const [selectedCurrency, setSelectedCurrency] = useState('EGP');
   const [exchangeRate, setExchangeRate] = useState(1.0);
   const [quantity, setQuantity] = useState(1000);
+  const [selectedUOM, setSelectedUOM] = useState('');
   const [unitPrice, setUnitPrice] = useState(100);
   const [reference, setReference] = useState('PO-2026-');
   const [notes, setNotes] = useState('');
@@ -60,13 +64,28 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
   const selectedItem = rawMaterials.find(m => m.id === selectedItemId) || products.find(p => p.id === selectedItemId);
   const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
 
+  // UOM Resolution & Secondary UOMs Hierarchy
+  const itemBaseUOM = selectedItem?.defaultUOM || 'KG';
+  const availableUOMs = getAvailableUOMsForItem(itemBaseUOM, uoms);
+
+  // When selected item changes, reset UOM to item's default UOM
+  React.useEffect(() => {
+    if (selectedItem) {
+      setSelectedUOM(selectedItem.defaultUOM || 'KG');
+    }
+  }, [selectedItemId]);
+
+  const activeTransactionUOM = selectedUOM || itemBaseUOM;
+  const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
+  const baseQuantity = quantity * conversionFactor;
+
   // Moving Average Simulation in Modal
   const unitPriceEGP = unitPrice * exchangeRate;
   const totalValueEGP = quantity * unitPriceEGP;
 
   const currentItemQty = selectedItem?.currentQty || 0;
   const currentItemVal = selectedItem?.totalValue || 0;
-  const simulatedNewQty = currentItemQty + quantity;
+  const simulatedNewQty = currentItemQty + baseQuantity;
   const simulatedNewVal = currentItemVal + totalValueEGP;
   const simulatedNewMAC = simulatedNewQty > 0 ? simulatedNewVal / simulatedNewQty : 0;
 
@@ -104,7 +123,10 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
       itemType: (selectedItem as any).itemType || ItemType.RAW_MATERIAL,
       warehouseId: selectedWarehouseId,
       quantity,
-      uom: selectedItem.defaultUOM || 'KG',
+      uom: activeTransactionUOM,
+      conversionFactor,
+      baseQuantity,
+      baseUOM: itemBaseUOM,
       unitPrice,
       unitPriceEGP,
       totalValueEGP,
@@ -166,11 +188,18 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
     {
       key: 'quantity',
       headerAr: 'الكمية المستلمة',
-      headerEn: 'Quantity',
+      headerEn: 'Received Qty',
       render: r => (
-        <span className="font-mono font-bold text-emerald-700">
-          +{formatNumber(r.quantity, language)} {r.uom}
-        </span>
+        <div className="space-y-0.5">
+          <span className="font-mono font-bold text-emerald-700">
+            +{formatNumber(r.quantity, language)} {r.uom}
+          </span>
+          {r.conversionFactor && r.conversionFactor !== 1 && (
+            <div className="text-[10px] text-blue-600 font-mono">
+              = {formatNumber(r.baseQuantity ?? (r.quantity * r.conversionFactor), language)} {r.baseUOM || 'KG'} (موحد)
+            </div>
+          )}
+        </div>
       ),
       exportValue: r => r.quantity
     },
@@ -419,21 +448,42 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                 </div>
               </div>
 
-              {/* Quantity & Unit Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Quantity, UOM & Unit Price */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? `الكمية المستلمة (${selectedItem?.defaultUOM || 'KG'}) *` : 'Received Quantity *'}
+                    {isAr ? 'الكمية المستلمة *' : 'Received Quantity *'}
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0.001"
                     step="any"
                     value={quantity}
                     onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
                     className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-slate-900"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'وحدة القياس المستلمة *' : 'Transaction UOM *'}
+                  </label>
+                  <select
+                    value={activeTransactionUOM}
+                    onChange={e => setSelectedUOM(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-blue-300 bg-blue-50/50 font-bold text-blue-900"
+                    required
+                  >
+                    {availableUOMs.map(u => (
+                      <option key={u.id} value={u.code}>
+                        {u.code} - {isAr ? u.nameAr : u.nameEn} {u.conversionFactor && u.conversionFactor !== 1 ? `(×${u.conversionFactor})` : `(${isAr ? 'أساسية' : 'Base'})`}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    {isAr ? `الوحدة الموحدة الأساسية للصنف: ${itemBaseUOM}` : `Item Base UOM: ${itemBaseUOM}`}
+                  </span>
                 </div>
 
                 <div>
@@ -451,6 +501,22 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                   />
                 </div>
               </div>
+
+              {/* Conversion Preview Notice if secondary UOM */}
+              {conversionFactor !== 1 && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+                    <span>
+                      {formatUOMTransactionLabel(quantity, activeTransactionUOM, itemBaseUOM, conversionFactor, language)}
+                    </span>
+                  </div>
+                  <div className="font-mono font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded">
+                    {isAr ? 'الكمية بالوحدة الموحدة للمخزون:' : 'Unified Base Qty:'}{' '}
+                    {formatNumber(baseQuantity, language)} {itemBaseUOM}
+                  </div>
+                </div>
+              )}
 
               {/* References & Notes */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -488,19 +554,19 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-[11px] font-mono border-t border-blue-200/60 pt-2">
                   <div>
-                    <span className="text-slate-500">{isAr ? 'الرصيد السابق:' : 'Prev Stock:'}</span>
-                    <div className="font-bold">{formatNumber(currentItemQty, language)} كجم</div>
-                    <div className="text-slate-500 text-[10px]">{formatCurrency(selectedItem?.movingAverageCost || 0, language)}/كجم</div>
+                    <span className="text-slate-500">{isAr ? 'الرصيد السابق (موحد):' : 'Prev Stock:'}</span>
+                    <div className="font-bold">{formatNumber(currentItemQty, language)} {itemBaseUOM}</div>
+                    <div className="text-slate-500 text-[10px]">{formatCurrency(selectedItem?.movingAverageCost || 0, language)}/{itemBaseUOM}</div>
                   </div>
                   <div>
-                    <span className="text-slate-500">{isAr ? 'الإضافة الحالية:' : 'Addition:'}</span>
-                    <div className="font-bold text-emerald-700">+{formatNumber(quantity, language)} كجم</div>
+                    <span className="text-slate-500">{isAr ? 'الإضافة الحالية (موحد):' : 'Addition:'}</span>
+                    <div className="font-bold text-emerald-700">+{formatNumber(baseQuantity, language)} {itemBaseUOM}</div>
                     <div className="text-emerald-700 text-[10px]">{formatCurrency(totalValueEGP, language)}</div>
                   </div>
                   <div>
                     <span className="text-slate-500">{isAr ? 'متوسط التكلفة الجديد:' : 'New MAC:'}</span>
-                    <div className="font-bold text-blue-700 text-xs">{formatCurrency(simulatedNewMAC, language)}/كجم</div>
-                    <div className="text-slate-500 text-[10px]">{formatNumber(simulatedNewQty, language)} كجم</div>
+                    <div className="font-bold text-blue-700 text-xs">{formatCurrency(simulatedNewMAC, language)}/{itemBaseUOM}</div>
+                    <div className="text-slate-500 text-[10px]">{formatNumber(simulatedNewQty, language)} {itemBaseUOM}</div>
                   </div>
                 </div>
               </div>
@@ -588,7 +654,13 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
             { labelAr: 'اسم الصنف', labelEn: 'Item Name', value: printReceipt.itemName },
             { labelAr: 'كود الصنف', labelEn: 'Item Code', value: printReceipt.itemCode },
             { labelAr: 'المورد', labelEn: 'Supplier', value: printReceipt.supplierName },
-            { labelAr: 'الكمية المستلمة', labelEn: 'Received Qty', value: `${printReceipt.quantity} ${printReceipt.uom}` },
+            {
+              labelAr: 'الكمية المستلمة',
+              labelEn: 'Received Qty',
+              value: printReceipt.conversionFactor && printReceipt.conversionFactor !== 1
+                ? `${printReceipt.quantity} ${printReceipt.uom} (= ${formatNumber(printReceipt.baseQuantity ?? (printReceipt.quantity * printReceipt.conversionFactor), language)} ${printReceipt.baseUOM || 'KG'} بالوحدة الموحدة)`
+                : `${formatNumber(printReceipt.quantity, language)} ${printReceipt.uom}`
+            },
             { labelAr: 'سعر الوحدة', labelEn: 'Unit Price', value: formatCurrency(printReceipt.unitPriceEGP, language) },
             { labelAr: 'رقم المرجع', labelEn: 'Reference', value: printReceipt.reference || '-' }
           ]}

@@ -220,13 +220,35 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
     checkScrollState();
     const el = tabsContainerRef.current;
     if (!el) return;
+
+    // Enable mouse wheel horizontal scrolling
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollBy({ left: e.deltaY, behavior: 'auto' });
+      }
+    };
+
     el.addEventListener('scroll', checkScrollState, { passive: true });
+    el.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('resize', checkScrollState);
     return () => {
       el.removeEventListener('scroll', checkScrollState);
+      el.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', checkScrollState);
     };
   }, [checkScrollState]);
+
+  // Auto-scroll active tab into view when selected
+  useEffect(() => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    const activeBtn = el.querySelector<HTMLElement>('[data-active="true"]');
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+    setTimeout(checkScrollState, 350);
+  }, [activeSubTab, checkScrollState]);
 
   const handleScroll = (direction: 'left' | 'right') => {
     const el = tabsContainerRef.current;
@@ -453,6 +475,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 px-2 text-xs custom-nav-scrollbar scroll-smooth"
         >
           <button
+            data-active={activeSubTab === 'categories'}
             onClick={() => { setActiveSubTab('categories'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'categories'
@@ -470,6 +493,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'raw'}
             onClick={() => { setActiveSubTab('raw'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'raw'
@@ -487,6 +511,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'products'}
             onClick={() => { setActiveSubTab('products'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'products'
@@ -504,6 +529,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'boms'}
             onClick={() => { setActiveSubTab('boms'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'boms'
@@ -521,6 +547,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'warehouses'}
             onClick={() => { setActiveSubTab('warehouses'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'warehouses'
@@ -538,6 +565,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'machines'}
             onClick={() => { setActiveSubTab('machines'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'machines'
@@ -555,6 +583,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'partners'}
             onClick={() => { setActiveSubTab('partners'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'partners'
@@ -572,6 +601,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'uoms'}
             onClick={() => { setActiveSubTab('uoms'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'uoms'
@@ -589,6 +619,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'currencies'}
             onClick={() => { setActiveSubTab('currencies'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'currencies'
@@ -606,6 +637,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
 
           <button
+            data-active={activeSubTab === 'users'}
             onClick={() => { setActiveSubTab('users'); setSearchTerm(''); }}
             className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeSubTab === 'users'

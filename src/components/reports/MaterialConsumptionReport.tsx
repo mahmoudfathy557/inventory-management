@@ -72,7 +72,7 @@ export const MaterialConsumptionReport: React.FC = () => {
       isAr ? 'المنتج التام' : 'Finished Product',
       isAr ? 'الخامة المستهلكة' : 'Raw Material',
       isAr ? 'كود الخامة' : 'Material Code',
-      isAr ? 'الوحدة' : 'UOM',
+      isAr ? 'الوحدة الموحدة للخامة' : 'Unified Material UOM',
       isAr ? 'الكمية المخططة' : 'Planned Qty',
       isAr ? 'الكمية الفعلية' : 'Actual Qty',
       isAr ? 'فارق الكمية' : 'Variance Qty',
@@ -80,8 +80,8 @@ export const MaterialConsumptionReport: React.FC = () => {
       isAr ? 'التكلفة المخططة' : 'Planned Cost',
       isAr ? 'التكلفة الفعلية' : 'Actual Cost',
       isAr ? 'فارق التكلفة' : 'Variance Value',
-      isAr ? 'الكمية المنتجة' : 'Finished Qty',
-      isAr ? 'كمية الهالك' : 'Scrap Qty'
+      isAr ? 'الكمية المنتجة (موحد)' : 'Finished Qty (Unified)',
+      isAr ? 'كمية الهالك (موحد)' : 'Scrap Qty (Unified)'
     ];
 
     const rows = filteredLines.map(l => [
@@ -173,14 +173,14 @@ export const MaterialConsumptionReport: React.FC = () => {
                 <th className="p-2.5">{isAr ? 'رقم الأمر' : 'Order No'}</th>
                 <th className="p-2.5">{isAr ? 'المنتج' : 'Product'}</th>
                 <th className="p-2.5">{isAr ? 'الخامة' : 'Raw Material'}</th>
-                <th className="p-2.5 text-center">{isAr ? 'مخطط' : 'Planned'}</th>
-                <th className="p-2.5 text-center text-blue-700">{isAr ? 'فعلي' : 'Actual'}</th>
+                <th className="p-2.5 text-center">{isAr ? 'مخطط (خامات)' : 'Planned (Mat)'}</th>
+                <th className="p-2.5 text-center text-blue-700">{isAr ? 'فعلي (موحد)' : 'Actual (Unified)'}</th>
                 <th className="p-2.5 text-center">{isAr ? 'فارق الكمية' : 'Variance Qty'}</th>
                 <th className="p-2.5">{isAr ? 'متوسط التكلفة' : 'MAC (EGP)'}</th>
                 <th className="p-2.5 font-bold text-slate-800">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</th>
                 <th className="p-2.5">{isAr ? 'فارق القيمة' : 'Variance Val'}</th>
-                <th className="p-2.5 text-center text-emerald-700">{isAr ? 'المنتج التام' : 'Produced FG'}</th>
-                <th className="p-2.5 text-center text-purple-700">{isAr ? 'الهالك' : 'Scrap'}</th>
+                <th className="p-2.5 text-center text-emerald-700">{isAr ? 'المنتج التام (موحد)' : 'Produced FG (Unified)'}</th>
+                <th className="p-2.5 text-center text-purple-700">{isAr ? 'الهالك (موحد)' : 'Scrap (Unified)'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

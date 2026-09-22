@@ -227,6 +227,7 @@ export const InventoryAuditView: React.FC = () => {
           isAr ? 'الصنف' : 'Item',
           isAr ? 'كود الصنف' : 'Item Code',
           isAr ? 'المستودع' : 'Warehouse',
+          isAr ? 'الوحدة الموحدة' : 'Unified UOM',
           isAr ? 'الوارد (+)' : 'Qty In',
           isAr ? 'المنصرف (-)' : 'Qty Out',
           isAr ? 'الرصيد التراكمي' : 'Balance Qty',
@@ -236,21 +237,25 @@ export const InventoryAuditView: React.FC = () => {
           isAr ? 'ملاحظات' : 'Notes'
         ];
 
-        const rows = filteredEntries.map(e => [
-          e.date,
-          e.documentNumber,
-          e.transactionType,
-          e.itemName,
-          e.itemCode,
-          e.warehouseName,
-          e.qtyIn,
-          e.qtyOut,
-          e.balanceQty,
-          e.movingAverageCostEGP,
-          e.runningInventoryValueEGP,
-          e.createdBy,
-          e.notes || ''
-        ]);
+        const rows = filteredEntries.map(e => {
+          const itemUom = e.uom || (rawMaterials.find(m => m.id === e.itemId)?.defaultUOM) || (products.find(p => p.id === e.itemId)?.defaultUOM) || 'KG';
+          return [
+            e.date,
+            e.documentNumber,
+            e.transactionType,
+            e.itemName,
+            e.itemCode,
+            e.warehouseName,
+            itemUom,
+            e.qtyIn,
+            e.qtyOut,
+            e.balanceQty,
+            e.movingAverageCostEGP,
+            e.runningInventoryValueEGP,
+            e.createdBy,
+            e.notes || ''
+          ];
+        });
 
         exportToCSV(headers, rows, 'Audit_Inventory_Ledger');
         break;
@@ -553,39 +558,46 @@ export const InventoryAuditView: React.FC = () => {
       key: 'qtyIn',
       headerAr: 'الوارد (+)',
       headerEn: 'Qty In',
-      render: e =>
-        e.qtyIn > 0 ? (
+      render: e => {
+        const itemUom = e.uom || (rawMaterials.find(m => m.id === e.itemId)?.defaultUOM) || (products.find(p => p.id === e.itemId)?.defaultUOM) || 'KG';
+        return e.qtyIn > 0 ? (
           <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-            +{formatNumber(e.qtyIn, language)} {e.uom}
+            +{formatNumber(e.qtyIn, language)} {itemUom}
           </span>
         ) : (
           <span className="text-slate-300">-</span>
-        ),
+        );
+      },
       exportValue: e => e.qtyIn
     },
     {
       key: 'qtyOut',
       headerAr: 'المنصرف (-)',
       headerEn: 'Qty Out',
-      render: e =>
-        e.qtyOut > 0 ? (
+      render: e => {
+        const itemUom = e.uom || (rawMaterials.find(m => m.id === e.itemId)?.defaultUOM) || (products.find(p => p.id === e.itemId)?.defaultUOM) || 'KG';
+        return e.qtyOut > 0 ? (
           <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
-            -{formatNumber(e.qtyOut, language)} {e.uom}
+            -{formatNumber(e.qtyOut, language)} {itemUom}
           </span>
         ) : (
           <span className="text-slate-300">-</span>
-        ),
+        );
+      },
       exportValue: e => e.qtyOut
     },
     {
       key: 'balanceQty',
-      headerAr: 'الرصيد التراكمي',
-      headerEn: 'Balance Qty',
-      render: e => (
-        <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-          {formatNumber(e.balanceQty, language)} {e.uom}
-        </span>
-      ),
+      headerAr: 'الرصيد التراكمي (موحد)',
+      headerEn: 'Unified Balance Qty',
+      render: e => {
+        const itemUom = e.uom || (rawMaterials.find(m => m.id === e.itemId)?.defaultUOM) || (products.find(p => p.id === e.itemId)?.defaultUOM) || 'KG';
+        return (
+          <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+            {formatNumber(e.balanceQty, language)} {itemUom}
+          </span>
+        );
+      },
       exportValue: e => e.balanceQty
     },
     {

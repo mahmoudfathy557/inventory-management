@@ -194,7 +194,7 @@ export const InventoryBalanceReport: React.FC = () => {
       isAr ? 'اسم الصنف' : 'Item Name',
       isAr ? 'المستودع' : 'Warehouse',
       isAr ? 'نوع الصنف' : 'Item Type',
-      isAr ? 'الوحدة' : 'UOM',
+      isAr ? 'الوحدة الموحدة' : 'Unified Base UOM',
       isAr ? 'الوارد مشتريات' : 'Purchase Receipts',
       isAr ? 'تحويلات واردة' : 'Transfers In',
       isAr ? 'إنتاج تام وارد' : 'Prod Receipts',
@@ -339,7 +339,7 @@ export const InventoryBalanceReport: React.FC = () => {
                 <th className="p-2.5">{isAr ? 'كود الصنف' : 'Code'}</th>
                 <th className="p-2.5">{isAr ? 'اسم الصنف' : 'Item Name'}</th>
                 <th className="p-2.5">{isAr ? 'المستودع' : 'Warehouse'}</th>
-                <th className="p-2.5 text-center">{isAr ? 'الوحدة' : 'UOM'}</th>
+                <th className="p-2.5 text-center">{isAr ? 'الوحدة الموحدة' : 'Unified UOM'}</th>
                 <th className="p-2.5 text-center text-emerald-700 bg-emerald-50/50">{isAr ? 'وارد مشتريات' : 'Receipts'}</th>
                 <th className="p-2.5 text-center text-blue-700 bg-blue-50/50">{isAr ? 'وارد إنتاج' : 'Prod Rec'}</th>
                 <th className="p-2.5 text-center text-amber-700 bg-amber-50/50">{isAr ? 'تحويل وارد' : 'Trans In'}</th>
@@ -358,7 +358,7 @@ export const InventoryBalanceReport: React.FC = () => {
                   <td className="p-2.5 font-mono font-bold text-blue-700">{r.itemCode}</td>
                   <td className="p-2.5 font-medium text-slate-800">{r.itemName}</td>
                   <td className="p-2.5 text-slate-600">{r.warehouseName}</td>
-                  <td className="p-2.5 text-center text-slate-500 font-mono">{r.uom}</td>
+                  <td className="p-2.5 text-center text-slate-700 font-mono font-bold bg-slate-50/50">{r.uom}</td>
                   <td className="p-2.5 text-center font-mono text-emerald-700 bg-emerald-50/30">
                     {r.receiptsQty > 0 ? formatNumber(r.receiptsQty, language) : '-'}
                   </td>
@@ -378,7 +378,7 @@ export const InventoryBalanceReport: React.FC = () => {
                     {r.scrapQty > 0 ? formatNumber(r.scrapQty, language) : '-'}
                   </td>
                   <td className="p-2.5 font-mono font-bold text-slate-900 bg-slate-50">
-                    {formatNumber(r.closingQty, language)}
+                    {formatNumber(r.closingQty, language)} <span className="text-[10px] text-slate-500 font-normal">{r.uom}</span>
                   </td>
                   <td className="p-2.5 font-mono text-slate-700">
                     {formatCurrency(r.movingAverageCost, language)}
@@ -421,7 +421,13 @@ export const InventoryBalanceReport: React.FC = () => {
                     {drillDownItem.code}
                   </span>
                 </h4>
-                <p className="text-xs text-slate-500 mt-0.5">{drillDownItem.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                  <span>{drillDownItem.name}</span>
+                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {isAr ? 'الوحدة الموحدة: ' : 'Unified Base UOM: '}
+                    {filteredRows.find(r => r.itemId === drillDownItem.id)?.uom || 'KG'}
+                  </span>
+                </p>
               </div>
               <button
                 onClick={() => setDrillDownItem(null)}
@@ -527,7 +533,7 @@ export const InventoryBalanceReport: React.FC = () => {
           { key: 'code', headerAr: 'كود الصنف', headerEn: 'Item Code', isMono: true, width: '90px' },
           { key: 'name', headerAr: 'اسم الصنف والمواصفة', headerEn: 'Item Name' },
           { key: 'wh', headerAr: 'المستودع', headerEn: 'Warehouse' },
-          { key: 'uom', headerAr: 'الوحدة', headerEn: 'UOM', align: 'center', width: '50px' },
+          { key: 'uom', headerAr: 'الوحدة الموحدة', headerEn: 'Unified UOM', align: 'center', width: '70px' },
           { key: 'in', headerAr: 'وارد مشتريات', headerEn: 'Purch Receipts', align: 'right', isMono: true },
           { key: 'trIn', headerAr: 'تحويل وارد', headerEn: 'Transfer In', align: 'right', isMono: true },
           { key: 'prodIn', headerAr: 'وارد إنتاج', headerEn: 'Prod Receipts', align: 'right', isMono: true },
