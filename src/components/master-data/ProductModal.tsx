@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, Save } from 'lucide-react';
+import { X, Package, Save, Bookmark, Plus, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Product, ItemType } from '../../types';
+import { Product, ItemType, VALUATION_METHOD_LABELS, ItemCategory } from '../../types';
+import { ItemCategoryModal } from './ItemCategoryModal';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -10,8 +11,9 @@ interface ProductModalProps {
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onClose }) => {
-  const { language, warehouses, uoms, saveProduct } = useApp();
+  const { language, warehouses, uoms, itemCategories, saveProduct } = useApp();
   const isAr = language === 'ar';
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Product>>({
     code: '',
@@ -19,6 +21,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
     nameEn: '',
     description: '',
     productType: ItemType.FINISHED_PRODUCT,
+    categoryId: '',
+    categoryCode: '',
+    categoryNameAr: '',
+    categoryNameEn: '',
+    valuationMethod: undefined,
     defaultUOM: 'KG',
     alternativeUOM: 'MTR',
     defaultWarehouseId: 'wh-fg',
@@ -40,6 +47,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
         nameEn: '',
         description: '',
         productType: ItemType.FINISHED_PRODUCT,
+        categoryId: '',
+        categoryCode: '',
+        categoryNameAr: '',
+        categoryNameEn: '',
+        valuationMethod: undefined,
         defaultUOM: 'KG',
         alternativeUOM: 'MTR',
         defaultWarehouseId: warehouses.find(w => w.type === 'FINISHED_GOODS')?.id || 'wh-fg',
@@ -54,6 +66,33 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
 
   if (!isOpen) return null;
 
+  const handleCategoryChange = (catId: string) => {
+    const selected = itemCategories.find(c => c.id === catId);
+    if (selected) {
+      setFormData(prev => ({
+        ...prev,
+        categoryId: selected.id,
+        categoryCode: selected.code,
+        categoryNameAr: selected.nameAr,
+        categoryNameEn: selected.nameEn,
+        valuationMethod: selected.valuationMethod
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        categoryId: '',
+        categoryCode: '',
+        categoryNameAr: '',
+        categoryNameEn: '',
+        valuationMethod: undefined
+      }));
+    }
+  };
+
+  const selectedCategory = itemCategories.find(c => c.id === formData.categoryId);
+  const activeMethod = selectedCategory?.valuationMethod || formData.valuationMethod;
+  const valuationInfo = activeMethod ? VALUATION_METHOD_LABELS[activeMethod] : null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.code || !formData.nameAr) return;
@@ -65,6 +104,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
       nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
       description: formData.description || '',
       productType: formData.productType || ItemType.FINISHED_PRODUCT,
+      categoryId: formData.categoryId || undefined,
+      categoryCode: formData.categoryCode || undefined,
+      categoryNameAr: formData.categoryNameAr || undefined,
+      categoryNameEn: formData.categoryNameEn || undefined,
+      valuationMethod: activeMethod || undefined,
       defaultUOM: formData.defaultUOM || 'KG',
       alternativeUOM: formData.alternativeUOM || 'MTR',
       defaultWarehouseId: formData.defaultWarehouseId || 'wh-fg',
@@ -107,6 +151,78 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {/* ITEM CATEGORY & VALUATION METHOD */}
+          <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-slate-800 font-bold flex items-center gap-1.5">
+                <Bookmark className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{isAr ? 'مجموعة الصنف وتصنيف المخزون (Item Category)' : 'Item Category & Group'}</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(true)}
+                className="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1 hover:underline"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{isAr ? 'إنشاء مجموعة جديدة' : 'New Group'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <select
+                  value={formData.categoryId || ''}
+                  onChange={e => handleCategoryChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                >
+                  <option value="">{isAr ? '-- اختر مجموعة الصنف --' : '-- Select Category --'}</option>
+                  {itemCategories
+                    .filter(c => c.applicableType === 'ALL' || c.applicableType === formData.productType || !c.applicableType)
+                    .map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.code} - {isAr ? cat.nameAr : cat.nameEn} ({cat.valuationMethod})
+                      </option>
+                    ))}
+                </select>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {isAr
+                    ? 'يتم تحديد طريقة تقييم المخزون تلقائياً وفق المجموعة المختارة'
+                    : 'Inventory valuation method is inherited from the assigned group'}
+                </span>
+              </div>
+
+              {/* Valuation Method Card Preview */}
+              <div>
+                {valuationInfo ? (
+                  <div className={`p-2.5 rounded-lg border text-[11px] ${valuationInfo.badgeBg} ${valuationInfo.border}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{isAr ? 'طريقة التقييم المعتمدة:' : 'Valuation Method:'}</span>
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded font-mono font-bold text-[10px] bg-white/80 border ${valuationInfo.border} ${valuationInfo.badgeText}`}>
+                        {activeMethod}
+                      </span>
+                    </div>
+                    <div className={`font-bold ${valuationInfo.badgeText}`}>
+                      {isAr ? valuationInfo.ar : valuationInfo.en}
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-0.5">
+                      {isAr ? valuationInfo.descAr : valuationInfo.descEn}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-lg border border-dashed border-slate-300 bg-white text-[11px] text-slate-400 text-center flex flex-col items-center justify-center h-full">
+                    <span>{isAr ? 'لم يتم تحديد مجموعة صنف بعد' : 'No category selected yet'}</span>
+                    <span className="text-[10px] text-slate-400">
+                      {isAr ? 'اختر مجموعة لربط طريقة التقييم آلياً' : 'Select a group to bind valuation method'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
@@ -130,7 +246,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
                 value={formData.productType || ItemType.FINISHED_PRODUCT}
                 onChange={e => setFormData(prev => ({
                   ...prev,
-                  productType: e.target.value as (ItemType.FINISHED_PRODUCT | ItemType.SEMI_FINISHED)
+                  productType: e.target.value as any
                 }))}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
               >
@@ -139,6 +255,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
                 </option>
                 <option value={ItemType.SEMI_FINISHED}>
                   {isAr ? 'منتج نصف مصنع / وسيط (Semi-Finished)' : 'Semi-Finished Goods'}
+                </option>
+                <option value={ItemType.SCRAP}>
+                  {isAr ? 'هالك ومخلفات إنتاج (Scrap & By-products)' : 'Scrap & Industrial Waste'}
                 </option>
               </select>
             </div>
@@ -262,6 +381,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
           </div>
         </form>
       </div>
+
+      {/* Quick Add Item Category Modal */}
+      {isCategoryModalOpen && (
+        <ItemCategoryModal
+          isOpen={isCategoryModalOpen}
+          onClose={() => setIsCategoryModalOpen(false)}
+          onSaved={(newCat) => {
+            handleCategoryChange(newCat.id);
+            setIsCategoryModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };

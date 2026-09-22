@@ -16,7 +16,9 @@ import {
   MapPin,
   CheckCircle2,
   AlertCircle,
-  Calendar
+  Calendar,
+  Bookmark,
+  ArrowRightLeft
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -33,7 +35,11 @@ import {
   UOM,
   Currency,
   User,
-  WarehouseType
+  WarehouseType,
+  ItemCategory,
+  ValuationMethod,
+  VALUATION_METHOD_LABELS,
+  ItemType
 } from '../types';
 
 import { RawMaterialModal } from '../components/master-data/RawMaterialModal';
@@ -46,12 +52,14 @@ import { PartnerModal } from '../components/master-data/PartnerModal';
 import { UOMModal } from '../components/master-data/UOMModal';
 import { CurrencyModal } from '../components/master-data/CurrencyModal';
 import { UserModal } from '../components/master-data/UserModal';
+import { ItemCategoryModal } from '../components/master-data/ItemCategoryModal';
 import { CurrencyRatesManager } from '../components/master-data/CurrencyRatesManager';
 import { ClearSeedDataModal } from '../components/common/ClearSeedDataModal';
 import { MasterDataSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
 export type MasterDataTab =
+  | 'categories'
   | 'raw'
   | 'products'
   | 'boms'
@@ -70,6 +78,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
   const { isLoading } = usePerceivedLoading(180);
   const {
     language,
+    itemCategories,
     rawMaterials,
     products,
     warehouses,
@@ -81,6 +90,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
     uoms,
     currencies,
     users,
+    deleteItemCategory,
     deleteRawMaterial,
     deleteProduct,
     deleteBOM,
@@ -100,8 +110,13 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
   const [searchTerm, setSearchTerm] = useState('');
   const [partnerSubtype, setPartnerSubtype] = useState<'ALL' | 'CUSTOMERS' | 'SUPPLIERS'>('ALL');
   const [warehouseViewType, setWarehouseViewType] = useState<'ALL' | 'WH' | 'LOC'>('ALL');
+  const [valuationMethodFilter, setValuationMethodFilter] = useState<'ALL' | ValuationMethod>('ALL');
+  const [productTypeFilter, setProductTypeFilter] = useState<'ALL' | ItemType>('ALL');
 
   // Modals state
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<ItemCategory | null>(null);
+
   const [isRawModalOpen, setIsRawModalOpen] = useState(false);
   const [selectedRaw, setSelectedRaw] = useState<RawMaterial | null>(null);
 
@@ -179,6 +194,16 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
             <Trash2 className="w-3.5 h-3.5" />
             <span>{isAr ? 'مسح البيانات والبدء من الصفر' : 'Clear & Start Scratch'}</span>
           </button>
+          {activeSubTab === 'categories' && (
+            <button
+              onClick={() => { setSelectedCategory(null); setIsCategoryModalOpen(true); }}
+              className="px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isAr ? 'تكويد مجموعة جديدة' : 'Add Item Group'}</span>
+            </button>
+          )}
+
           {activeSubTab === 'raw' && (
             <button
               onClick={() => { setSelectedRaw(null); setIsRawModalOpen(true); }}
@@ -291,6 +316,21 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
       {/* Sub Tabs Navigation Bar */}
       <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2 overflow-x-auto text-xs scrollbar-none">
+        <button
+          onClick={() => { setActiveSubTab('categories'); setSearchTerm(''); }}
+          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
+            activeSubTab === 'categories'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
+          }`}
+        >
+          <Bookmark className="w-3.5 h-3.5" />
+          <span>{isAr ? 'مجموعات الأصناف وطرق التقييم' : 'Item Groups & Valuation'}</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
+            {itemCategories.length}
+          </span>
+        </button>
+
         <button
           onClick={() => { setActiveSubTab('raw'); setSearchTerm(''); }}
           className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
@@ -439,6 +479,195 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
       </div>
 
+      {/* SUB-VIEW 0: ITEM CATEGORIES & VALUATION METHODS */}
+      {activeSubTab === 'categories' && (
+        <div className="space-y-4">
+          {/* Method Filter & Statistics */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-700">{isAr ? 'طريقة تقييم المخزون:' : 'Valuation Method:'}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(['ALL', ValuationMethod.MOVING_AVERAGE, ValuationMethod.FIFO, ValuationMethod.STANDARD] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setValuationMethodFilter(m)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        valuationMethodFilter === m
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {m === 'ALL'
+                        ? (isAr ? 'الكل' : 'All')
+                        : m === ValuationMethod.MOVING_AVERAGE
+                        ? (isAr ? 'متوسط متحرك (Moving average)' : 'Moving Average')
+                        : m === ValuationMethod.FIFO
+                        ? (isAr ? 'الوارد أولاً صادر أولاً (FIFO)' : 'FIFO')
+                        : (isAr ? 'التكلفة المعيارية (Standard)' : 'Standard')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                <span>{isAr ? 'المجموعات المخزنية المعرفة:' : 'Defined Groups:'}</span>
+                <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
+                  {itemCategories.length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* If no categories yet */}
+          {itemCategories.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-indigo-200 p-10 text-center space-y-4 shadow-2xs">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-xs">
+                <Bookmark className="w-8 h-8" />
+              </div>
+              <div className="max-w-md mx-auto space-y-2">
+                <h3 className="text-base font-bold text-slate-900">
+                  {isAr ? 'لم تقم بتكويد أي مجموعات مخزنية بعد' : 'No Item Groups Defined Yet'}
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {isAr
+                    ? 'يمكنك تكويد مجموعات المخزون وفق تصنيفات مصنعك (مثل: Carrier, Additives, Scrap, الخامات الأساسية...) وربط كل مجموعة بإحدى طرق تقييم المخزون الثلاث: Moving average cost أو FIFO أو Standard. ستظهر المجموعات تلقائياً عند تكويد أي خامة أو منتج أو هالك.'
+                    : 'Create your inventory groups (e.g., Carrier, Additives, Scrap) and configure their valuation method (Moving average cost, FIFO, Standard). These groups will be available when coding raw materials, products, and scrap.'}
+                </p>
+              </div>
+              <button
+                onClick={() => { setSelectedCategory(null); setIsCategoryModalOpen(true); }}
+                className="px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition inline-flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isAr ? 'تكويد أول مجموعة مخزنية الآن' : 'Create First Item Group'}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {itemCategories
+                .filter(cat => {
+                  const matchSearch =
+                    cat.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    cat.nameAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    cat.nameEn.toLowerCase().includes(searchTerm.toLowerCase());
+                  const matchVal =
+                    valuationMethodFilter === 'ALL' || cat.valuationMethod === valuationMethodFilter;
+                  return matchSearch && matchVal;
+                })
+                .map(cat => {
+                  const valLabel = VALUATION_METHOD_LABELS[cat.valuationMethod];
+                  const linkedRaw = rawMaterials.filter(r => r.categoryId === cat.id).length;
+                  const linkedProd = products.filter(p => p.categoryId === cat.id).length;
+
+                  return (
+                    <div
+                      key={cat.id}
+                      className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md transition space-y-3 relative group"
+                    >
+                      {/* Top Bar */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                            {cat.code}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            cat.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {cat.active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'معطل' : 'Inactive')}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => { setSelectedCategory(cat); setIsCategoryModalOpen(true); }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                            title={isAr ? 'تعديل المجموعة' : 'Edit'}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => triggerDelete(
+                              isAr ? 'حذف مجموعة الصنف' : 'Delete Item Group',
+                              isAr ? 'هل أنت متأكد من حذف هذه المجموعة؟ سيتم فك ارتباط عناصر المخزون التابعة لها.' : 'Are you sure you want to delete this category?',
+                              `${cat.code} - ${cat.nameAr}`,
+                              () => deleteItemCategory(cat.id)
+                            )}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                            title={isAr ? 'حذف المجموعة' : 'Delete'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Title & Description */}
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm leading-snug">{cat.nameAr}</h3>
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">{cat.nameEn}</p>
+                        {cat.description && (
+                          <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            {cat.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Valuation Method Card */}
+                      <div className={`p-3 rounded-xl border ${valLabel.badgeBg} ${valLabel.border} space-y-1.5`}>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-slate-700 flex items-center gap-1">
+                            <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>{isAr ? 'طريقة التقييم المعتمدة:' : 'Valuation Method:'}</span>
+                          </span>
+                          <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-white border ${valLabel.border} ${valLabel.badgeText}`}>
+                            {cat.valuationMethod}
+                          </span>
+                        </div>
+                        <div className={`text-xs font-bold ${valLabel.badgeText}`}>
+                          {isAr ? valLabel.ar : valLabel.en}
+                        </div>
+                        <p className="text-[10.5px] text-slate-600 leading-relaxed">
+                          {isAr ? valLabel.descAr : valLabel.descEn}
+                        </p>
+                        {cat.valuationMethod === ValuationMethod.STANDARD && typeof cat.standardCostEGP === 'number' && (
+                          <div className="pt-1.5 mt-1 border-t border-purple-200/60 flex items-center justify-between text-[11px]">
+                            <span className="text-purple-800 font-medium">{isAr ? 'التكلفة القياسية المحددة:' : 'Standard Cost:'}</span>
+                            <span className="font-mono font-bold text-purple-900">{formatCurrency(cat.standardCostEGP, language)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scope & Count */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>
+                          {isAr ? 'النطاق:' : 'Scope:'}{' '}
+                          <strong className="text-slate-800">
+                            {cat.applicableType === 'ALL' || !cat.applicableType
+                              ? (isAr ? 'شامل كل الأصناف' : 'All Items')
+                              : cat.applicableType === ItemType.RAW_MATERIAL
+                              ? (isAr ? 'خامات فقط' : 'Raw Materials')
+                              : cat.applicableType === ItemType.FINISHED_PRODUCT
+                              ? (isAr ? 'منتجات تامة' : 'Finished Goods')
+                              : cat.applicableType === ItemType.SEMI_FINISHED
+                              ? (isAr ? 'نصف مصنعة' : 'Semi-Finished')
+                              : (isAr ? 'هالك ومخلفات' : 'Scrap')}
+                          </strong>
+                        </span>
+                        <span>
+                          {isAr ? 'عناصر مرتبطة:' : 'Linked:'}{' '}
+                          <strong className="font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                            {linkedRaw + linkedProd}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* SUB-VIEW 1: RAW MATERIALS */}
       {activeSubTab === 'raw' && (
         <div className="space-y-4">
@@ -487,6 +716,31 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                     {m.notes && <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">{m.notes}</p>}
                   </div>
 
+                  {/* Category & Valuation Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {m.categoryNameAr ? (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                        <Bookmark className="w-2.5 h-2.5" />
+                        <span>{isAr ? m.categoryNameAr : (m.categoryNameEn || m.categoryNameAr)}</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] text-slate-400 bg-slate-50 border border-slate-200">
+                        {isAr ? 'بدون مجموعة' : 'No Group'}
+                      </span>
+                    )}
+                    {m.valuationMethod && (
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
+                        m.valuationMethod === ValuationMethod.FIFO
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : m.valuationMethod === ValuationMethod.STANDARD
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
+                        {m.valuationMethod}
+                      </span>
+                    )}
+                  </div>
+
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 grid grid-cols-2 gap-2 text-xs font-mono">
                     <div>
                       <span className="text-slate-500 text-[10px] font-sans block">{isAr ? 'الرصيد المتاح:' : 'Stock:'}</span>
@@ -516,54 +770,128 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
       {/* SUB-VIEW 2: FINISHED PRODUCTS */}
       {activeSubTab === 'products' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {products
-            .filter(p =>
-              p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              p.nameAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              p.nameEn.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            .map(p => (
-              <div
-                key={p.id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md transition space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                      {p.code}
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                      {p.productType}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => { setSelectedProd(p); setIsProdModalOpen(true); }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
-                      title={isAr ? 'تعديل المنتج' : 'Edit'}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => triggerDelete(
-                        isAr ? 'حذف المنتج' : 'Delete Product',
-                        isAr ? 'هل أنت متأكد من حذف هذا المنتج؟' : 'Are you sure you want to delete this product?',
-                        `${p.code} - ${p.nameAr}`,
-                        () => deleteProduct(p.id)
-                      )}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                      title={isAr ? 'حذف المنتج' : 'Delete'}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+        <div className="space-y-4">
+          {/* Product Type Filter Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setProductTypeFilter('ALL')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                productTypeFilter === 'ALL'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {isAr ? 'الكل' : 'All'} ({products.length})
+            </button>
+            <button
+              onClick={() => setProductTypeFilter(ItemType.FINISHED_PRODUCT)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                productTypeFilter === ItemType.FINISHED_PRODUCT
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {isAr ? 'منتجات تامة' : 'Finished Goods'} ({products.filter(p => p.productType === ItemType.FINISHED_PRODUCT).length})
+            </button>
+            <button
+              onClick={() => setProductTypeFilter(ItemType.SEMI_FINISHED)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                productTypeFilter === ItemType.SEMI_FINISHED
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {isAr ? 'منتجات نصف مصنعة' : 'Semi-Finished'} ({products.filter(p => p.productType === ItemType.SEMI_FINISHED).length})
+            </button>
+            <button
+              onClick={() => setProductTypeFilter(ItemType.SCRAP)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                productTypeFilter === ItemType.SCRAP
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {isAr ? 'هالك ومخلفات إنتاج' : 'Scrap & Waste'} ({products.filter(p => p.productType === ItemType.SCRAP).length})
+            </button>
+          </div>
 
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm leading-snug">{p.nameAr}</h3>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">{p.nameEn}</p>
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {products
+              .filter(p => {
+                const matchSearch =
+                  p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  p.nameAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  p.nameEn.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchType =
+                  productTypeFilter === 'ALL' || p.productType === productTypeFilter;
+                return matchSearch && matchType;
+              })
+              .map(p => (
+                <div
+                  key={p.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md transition space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                        {p.code}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                        {p.productType}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => { setSelectedProd(p); setIsProdModalOpen(true); }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                        title={isAr ? 'تعديل المنتج' : 'Edit'}
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => triggerDelete(
+                          isAr ? 'حذف المنتج' : 'Delete Product',
+                          isAr ? 'هل أنت متأكد من حذف هذا المنتج؟' : 'Are you sure you want to delete this product?',
+                          `${p.code} - ${p.nameAr}`,
+                          () => deleteProduct(p.id)
+                        )}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        title={isAr ? 'حذف المنتج' : 'Delete'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm leading-snug">{p.nameAr}</h3>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">{p.nameEn}</p>
+                  </div>
+
+                  {/* Category & Valuation Badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {p.categoryNameAr ? (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                        <Bookmark className="w-2.5 h-2.5" />
+                        <span>{isAr ? p.categoryNameAr : (p.categoryNameEn || p.categoryNameAr)}</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] text-slate-400 bg-slate-50 border border-slate-200">
+                        {isAr ? 'بدون مجموعة' : 'No Group'}
+                      </span>
+                    )}
+                    {p.valuationMethod && (
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
+                        p.valuationMethod === ValuationMethod.FIFO
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : p.valuationMethod === ValuationMethod.STANDARD
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
+                        {p.valuationMethod}
+                      </span>
+                    )}
+                  </div>
 
                 <div className="p-3 bg-emerald-50/40 rounded-xl border border-emerald-200/80 grid grid-cols-2 gap-2 text-xs font-mono">
                   <div>
@@ -581,6 +909,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                 </div>
               </div>
             ))}
+          </div>
         </div>
       )}
 
@@ -1252,6 +1581,12 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
       )}
 
       {/* MODALS */}
+      <ItemCategoryModal
+        isOpen={isCategoryModalOpen}
+        category={selectedCategory}
+        onClose={() => { setIsCategoryModalOpen(false); setSelectedCategory(null); }}
+      />
+
       <RawMaterialModal
         isOpen={isRawModalOpen}
         material={selectedRaw}

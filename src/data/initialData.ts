@@ -30,7 +30,8 @@ import {
   TransactionType,
   AuditLogEntry,
   OdooConfig,
-  OdooSyncLog
+  OdooSyncLog,
+  ItemCategory
 } from '../types';
 
 export const INITIAL_WAREHOUSES: Warehouse[] = [
@@ -1035,3 +1036,7 @@ export const INITIAL_ODOO_LOGS: OdooSyncLog[] = [
     details: 'ربط أمر الإنتاج PO-2026-0001 مع أمر تصنيع أودو MO/2026/001'
   }
 ];
+
+// Item Groups / Categories & Valuation Methods (Empty by default per user request)
+export const INITIAL_ITEM_CATEGORIES: ItemCategory[] = [];
+export const SAMPLE_ITEM_CATEGORIES: ItemCategory[] = [];

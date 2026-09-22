@@ -30,7 +30,8 @@ import {
   ItemType,
   AuditLogEntry,
   OdooConfig,
-  OdooSyncLog
+  OdooSyncLog,
+  ItemCategory
 } from '../types';
 import {
   INITIAL_WAREHOUSES,
@@ -48,6 +49,7 @@ import {
   INITIAL_RECEIPTS,
   INITIAL_LANDED_COSTS,
   INITIAL_TRANSFERS,
+  INITIAL_ITEM_CATEGORIES,
   INITIAL_PRODUCTION_ORDERS,
   INITIAL_MATERIAL_ISSUES,
   INITIAL_PRODUCTION_RECEIPTS,
@@ -122,6 +124,9 @@ interface AppContextType {
   deleteCurrencyRate: (id: string) => void;
   getExchangeRateForDate: (currencyCode: string, date?: string) => { rate: number; rateDate: string; isExact: boolean; source?: string };
   clearSeedDataAndStartScratch: () => void;
+  itemCategories: ItemCategory[];
+  saveItemCategory: (category: ItemCategory) => void;
+  deleteItemCategory: (id: string) => void;
   rawMaterials: RawMaterial[];
   products: Product[];
   machines: Machine[];
@@ -304,6 +309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [uoms, setUoms] = useState<UOM[]>(() => loadStorage('uoms', INITIAL_UOMS));
   const [currencies, setCurrencies] = useState<Currency[]>(() => loadStorage('currencies', INITIAL_CURRENCIES));
   const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>(() => loadStorage('currencyRates', INITIAL_CURRENCY_RATES));
+  const [itemCategories, setItemCategories] = useState<ItemCategory[]>(() => loadStorage('itemCategories', INITIAL_ITEM_CATEGORIES));
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(() => loadStorage('rawMaterials', INITIAL_RAW_MATERIALS));
   const [products, setProducts] = useState<Product[]>(() => loadStorage('products', INITIAL_PRODUCTS));
   const [machines, setMachines] = useState<Machine[]>(() => loadStorage('machines', INITIAL_MACHINES));
@@ -336,6 +342,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { saveStorage('uoms', uoms); }, [uoms]);
   useEffect(() => { saveStorage('currencies', currencies); }, [currencies]);
   useEffect(() => { saveStorage('currencyRates', currencyRates); }, [currencyRates]);
+  useEffect(() => { saveStorage('itemCategories', itemCategories); }, [itemCategories]);
   useEffect(() => { saveStorage('rawMaterials', rawMaterials); }, [rawMaterials]);
   useEffect(() => { saveStorage('products', products); }, [products]);
   useEffect(() => { saveStorage('machines', machines); }, [machines]);
@@ -1373,6 +1380,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('SAVE_LOCATION', 'مواقع الإنتاج', loc.code, `حفظ بيانات موقع الإنتاج ${loc.nameAr}`);
   };
 
+  const saveItemCategory = (category: ItemCategory) => {
+    setItemCategories(prev => {
+      const exists = prev.find(c => c.id === category.id);
+      if (exists) return prev.map(c => c.id === category.id ? category : c);
+      return [...prev, category];
+    });
+    logAudit('SAVE_ITEM_CATEGORY', 'مجموعات الأصناف وطرق التقييم', category.code, `حفظ مجموعة الأصناف ${category.nameAr} بطريقة تقييم ${category.valuationMethod}`);
+  };
+
+  const deleteItemCategory = (id: string) => {
+    const item = itemCategories.find(c => c.id === id);
+    setItemCategories(prev => prev.filter(c => c.id !== id));
+    logAudit('DELETE_ITEM_CATEGORY', 'مجموعات الأصناف وطرق التقييم', item?.code || id, `حذف مجموعة الأصناف ${item?.nameAr || id}`);
+  };
+
   const deleteRawMaterial = (id: string) => {
     const item = rawMaterials.find(r => r.id === id);
     setRawMaterials(prev => prev.filter(r => r.id !== id));
@@ -1583,6 +1605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCostAdjustments([]);
     setLedgerEntries([]);
     setAuditLogs([]);
+    setItemCategories([]);
     setRawMaterials([]);
     setProducts([]);
     setBoms([]);
@@ -1593,7 +1616,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const keys = [
       'receipts', 'landedCosts', 'issues', 'transfers', 'productionOrders',
       'materialIssues', 'productionReceipts', 'customerDeliveries', 'costAdjustments',
-      'ledgerEntries', 'auditLogs', 'rawMaterials', 'products', 'boms',
+      'ledgerEntries', 'auditLogs', 'itemCategories', 'rawMaterials', 'products', 'boms',
       'machines', 'suppliers', 'customers'
     ];
     keys.forEach(k => {
@@ -1794,6 +1817,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteCurrencyRate,
         getExchangeRateForDate,
         clearSeedDataAndStartScratch,
+        itemCategories,
+        saveItemCategory,
+        deleteItemCategory,
         rawMaterials,
         products,
         machines,

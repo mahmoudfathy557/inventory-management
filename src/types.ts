@@ -10,7 +10,75 @@ export enum WarehouseType {
 export enum ItemType {
   RAW_MATERIAL = 'RAW_MATERIAL',
   SEMI_FINISHED = 'SEMI_FINISHED',
-  FINISHED_PRODUCT = 'FINISHED_PRODUCT'
+  FINISHED_PRODUCT = 'FINISHED_PRODUCT',
+  SCRAP = 'SCRAP'
+}
+
+export enum ValuationMethod {
+  MOVING_AVERAGE = 'MOVING_AVERAGE', // Moving average cost
+  FIFO = 'FIFO',                     // FIFO (First In, First Out)
+  STANDARD = 'STANDARD'              // Standard Cost
+}
+
+export const VALUATION_METHOD_LABELS: Record<ValuationMethod, {
+  ar: string;
+  en: string;
+  shortAr: string;
+  shortEn: string;
+  descAr: string;
+  descEn: string;
+  badgeBg: string;
+  badgeText: string;
+  border: string;
+}> = {
+  [ValuationMethod.MOVING_AVERAGE]: {
+    ar: 'متوسط التكلفة المتحرك (Moving Average Cost)',
+    en: 'Moving Average Cost (AVCO)',
+    shortAr: 'متوسط متحرك (AVCO)',
+    shortEn: 'Moving Average',
+    descAr: 'إعادة احتساب متوسط التكلفة المرجح للوحدة آلياً مع كل حركة توريد أو استلام بالمستودع',
+    descEn: 'Dynamically recomputes weighted unit cost on each receipt or landed cost allocation',
+    badgeBg: 'bg-blue-50',
+    badgeText: 'text-blue-700',
+    border: 'border-blue-200'
+  },
+  [ValuationMethod.FIFO]: {
+    ar: 'الوارد أولاً صادر أولاً (FIFO)',
+    en: 'First In, First Out (FIFO)',
+    shortAr: 'الوارد أولاً صادر أولاً (FIFO)',
+    shortEn: 'FIFO',
+    descAr: 'صرف وتسعير الكميات من أقدم شحنات واردة ومسجلة بالمخزن وفق ترتيب زمني صارم',
+    descEn: 'Dispatches and values inventory based on oldest received lots first',
+    badgeBg: 'bg-emerald-50',
+    badgeText: 'text-emerald-700',
+    border: 'border-emerald-200'
+  },
+  [ValuationMethod.STANDARD]: {
+    ar: 'التكلفة المعيارية (Standard Cost)',
+    en: 'Standard Costing',
+    shortAr: 'تكلفة معيارية (Standard)',
+    shortEn: 'Standard Cost',
+    descAr: 'تطبيق تكلفة تقديرية قياسية ثابتة ومحددة مسبقاً مع رصد وتحليل فروقات الأسعار',
+    descEn: 'Applies fixed predetermined cost baseline and tracks price/usage variances',
+    badgeBg: 'bg-purple-50',
+    badgeText: 'text-purple-700',
+    border: 'border-purple-200'
+  }
+};
+
+export interface ItemCategory {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  valuationMethod: ValuationMethod;
+  applicableType?: ItemType | 'ALL';
+  standardCostEGP?: number;
+  description?: string;
+  notes?: string;
+  active: boolean;
+  createdAt?: string;
+  createdBy?: string;
 }
 
 export enum ProductionOrderStatus {
@@ -164,6 +232,11 @@ export interface RawMaterial {
   nameEn: string;
   description?: string;
   itemType: ItemType.RAW_MATERIAL;
+  categoryId?: string;
+  categoryCode?: string;
+  categoryNameAr?: string;
+  categoryNameEn?: string;
+  valuationMethod?: ValuationMethod;
   defaultUOM: string;
   alternativeUOM?: string;
   conversionFactor: number;
@@ -185,7 +258,12 @@ export interface Product {
   nameAr: string;
   nameEn: string;
   description?: string;
-  productType: ItemType.FINISHED_PRODUCT | ItemType.SEMI_FINISHED;
+  productType: ItemType.FINISHED_PRODUCT | ItemType.SEMI_FINISHED | ItemType.SCRAP;
+  categoryId?: string;
+  categoryCode?: string;
+  categoryNameAr?: string;
+  categoryNameEn?: string;
+  valuationMethod?: ValuationMethod;
   defaultUOM: string;
   alternativeUOM?: string;
   defaultWarehouseId: string;

@@ -30,7 +30,8 @@ import {
   TransactionType,
   AuditLogEntry,
   OdooConfig,
-  OdooSyncLog
+  OdooSyncLog,
+  ItemCategory
 } from '../types';
 
 /**
@@ -1182,3 +1183,6 @@ export const SEED_AUDIT_LOGS: AuditLogEntry[] = [
     details: 'تحميل 9,000 ج.م كهرباء وتوزيعها بين المخزون الحاضر (5,000 ج.م) وتكلفة المبيعات (4,000 ج.م)'
   }
 ];
+
+// Seed Item Categories (Clean slate / empty by default per user request)
+export const SEED_ITEM_CATEGORIES: ItemCategory[] = [];
