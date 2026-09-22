@@ -162,3 +162,38 @@
   }
 }
 
+/* ==========================================================================
+   Modern Elegant Scrollbar Styles
+   ========================================================================== */
+.custom-nav-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  scroll-behavior: smooth;
+}
+
+.custom-nav-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.custom-nav-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+  margin: 0 4px;
+}
+
+.custom-nav-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+  border: 1px solid #f1f5f9;
+  transition: background-color 0.2s ease;
+}
+
+.custom-nav-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.custom-nav-scrollbar::-webkit-scrollbar-thumb:active {
+  background: #64748b;
+}
+

@@ -26,17 +26,87 @@ import { OdooIntegrationView } from './views/OdooIntegrationView';
 import { MasterDataView } from './views/MasterDataView';
 import { AuthView } from './views/AuthView';
 
+const VALID_NAV_ITEMS: NavItem[] = [
+  'dashboard',
+  'receipts',
+  'landed-cost',
+  'transfers',
+  'issues',
+  'production',
+  'quality',
+  'deliveries',
+  'cost-adjustments',
+  'master-data',
+  'reports',
+  'odoo-sync',
+  'users',
+  'auth'
+];
+
+function getInitialTab(isAuthenticated: boolean): NavItem {
+  // 1. Check URL hash first (e.g. #master-data, #production)
+  if (typeof window !== 'undefined' && window.location.hash) {
+    const rawHash = window.location.hash.replace(/^#\/?/, '').trim() as NavItem;
+    if (VALID_NAV_ITEMS.includes(rawHash)) {
+      if (!isAuthenticated && rawHash !== 'auth') {
+        try {
+          localStorage.setItem('mrp_active_tab', rawHash);
+        } catch {}
+        return 'auth';
+      }
+      return rawHash;
+    }
+  }
+
+  // 2. Check localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('mrp_active_tab') as NavItem | null;
+      if (saved && VALID_NAV_ITEMS.includes(saved)) {
+        if (!isAuthenticated && saved !== 'auth') {
+          return 'auth';
+        }
+        return saved;
+      }
+    } catch {}
+  }
+
+  return isAuthenticated ? 'dashboard' : 'auth';
+}
+
 const MainAppContent: React.FC = () => {
   const { language, currentUser, isAuthenticated } = useApp();
   const isAr = language === 'ar';
 
-  const [currentTab, setCurrentTab] = useState<NavItem>(() => {
-    // If user is authenticated, start on dashboard; otherwise start on auth
-    return isAuthenticated ? 'dashboard' : 'auth';
-  });
+  const [currentTab, setCurrentTab] = useState<NavItem>(() => getInitialTab(isAuthenticated));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(false);
   const [selectedReceiptForLandedCost, setSelectedReceiptForLandedCost] = useState<string | undefined>();
+
+  // Synchronize current tab to localStorage and URL hash
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('mrp_active_tab', currentTab);
+      const targetHash = `#${currentTab}`;
+      if (window.location.hash !== targetHash) {
+        window.history.replaceState(null, '', targetHash);
+      }
+    } catch {}
+  }, [currentTab]);
+
+  // Support browser Back/Forward navigation & URL hash editing
+  React.useEffect(() => {
+    const handleHashChange = () => {
+      const rawHash = window.location.hash.replace(/^#\/?/, '').trim() as NavItem;
+      if (VALID_NAV_ITEMS.includes(rawHash) && rawHash !== currentTab) {
+        if (isAuthenticated || rawHash === 'auth') {
+          setCurrentTab(rawHash);
+        }
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [currentTab, isAuthenticated]);
 
   const handleOpenLandedCostModal = (receiptId: string) => {
     setSelectedReceiptForLandedCost(receiptId);
@@ -177,7 +247,16 @@ const MainAppContent: React.FC = () => {
 
                 {currentTab === 'auth' && (
                   <AuthView
-                    onSuccess={() => setCurrentTab('dashboard')}
+                    onSuccess={() => {
+                      try {
+                        const saved = localStorage.getItem('mrp_active_tab') as NavItem | null;
+                        if (saved && saved !== 'auth' && VALID_NAV_ITEMS.includes(saved)) {
+                          setCurrentTab(saved);
+                          return;
+                        }
+                      } catch {}
+                      setCurrentTab('dashboard');
+                    }}
                   />
                 )}
               </>

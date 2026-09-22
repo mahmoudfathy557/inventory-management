@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Boxes,
   Package,
@@ -19,7 +19,9 @@ import {
   Calendar,
   Bookmark,
   ArrowRightLeft,
-  Copy
+  Copy,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -107,7 +109,32 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
   const confirm = useConfirm();
 
   const isAr = language === 'ar';
-  const [activeSubTab, setActiveSubTab] = useState<MasterDataTab>(initialTab || 'raw');
+  const [activeSubTab, setActiveSubTab] = useState<MasterDataTab>(() => {
+    if (initialTab) return initialTab;
+    try {
+      const saved = localStorage.getItem('mrp_master_data_subtab') as MasterDataTab | null;
+      const validSubTabs: MasterDataTab[] = [
+        'categories', 'raw', 'products', 'boms', 'warehouses',
+        'machines', 'partners', 'uoms', 'currencies', 'users'
+      ];
+      if (saved && validSubTabs.includes(saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'raw';
+  });
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveSubTab(initialTab);
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mrp_master_data_subtab', activeSubTab);
+    } catch {}
+  }, [activeSubTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const [partnerSubtype, setPartnerSubtype] = useState<'ALL' | 'CUSTOMERS' | 'SUPPLIERS'>('ALL');
   const [warehouseViewType, setWarehouseViewType] = useState<'ALL' | 'WH' | 'LOC'>('ALL');
@@ -159,6 +186,62 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Tabs scroll container ref & arrows state
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScrollState = useCallback(() => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    // Note: in RTL, scrollLeft can be negative or 0 depending on browser engine
+    const maxScroll = scrollWidth - clientWidth;
+    if (maxScroll <= 2) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    // Handle both RTL and LTR
+    const isRtl = document.dir === 'rtl' || language === 'ar';
+    if (isRtl) {
+      // In modern browsers with RTL, scrollLeft can be 0 at leftmost, or negative
+      const absScroll = Math.abs(scrollLeft);
+      setCanScrollRight(absScroll > 5);
+      setCanScrollLeft(absScroll < maxScroll - 5);
+    } else {
+      setCanScrollLeft(scrollLeft > 5);
+      setCanScrollRight(scrollLeft < maxScroll - 5);
+    }
+  }, [language]);
+
+  useEffect(() => {
+    checkScrollState();
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', checkScrollState, { passive: true });
+    window.addEventListener('resize', checkScrollState);
+    return () => {
+      el.removeEventListener('scroll', checkScrollState);
+      window.removeEventListener('resize', checkScrollState);
+    };
+  }, [checkScrollState]);
+
+  const handleScroll = (direction: 'left' | 'right') => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    const isRtl = document.dir === 'rtl' || language === 'ar';
+    const amount = 240;
+    // Calculate delta based on direction and RTL
+    let delta = direction === 'left' ? -amount : amount;
+    if (isRtl) {
+      // In RTL, navigating left moves forward into content, right moves back
+      delta = direction === 'left' ? -amount : amount;
+    }
+    el.scrollBy({ left: delta, behavior: 'smooth' });
+    setTimeout(checkScrollState, 350);
+  };
 
   const triggerDelete = (title: string, message: string, itemName: string, onConfirm: () => void) => {
     void confirm({
@@ -324,157 +407,221 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
         </div>
       </div>
 
-      {/* Sub Tabs Navigation Bar */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2 overflow-x-auto text-xs scrollbar-none">
+      {/* Sub Tabs Navigation Bar with Elegant Smooth Scroll Bar & Navigation Controls */}
+      <div className="relative group/nav bg-white p-2 rounded-2xl border border-slate-200/90 shadow-2xs">
+        {/* Scroll Left Button */}
         <button
-          onClick={() => { setActiveSubTab('categories'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'categories'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
+          type="button"
+          onClick={() => handleScroll('left')}
+          className={`absolute left-1.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-indigo-600 hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all cursor-pointer ${
+            canScrollLeft ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
+          title={isAr ? 'تمرير لليسار' : 'Scroll left'}
+          aria-label="Scroll left"
         >
-          <Bookmark className="w-3.5 h-3.5" />
-          <span>{isAr ? 'مجموعات الأصناف وطرق التقييم' : 'Item Groups & Valuation'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {itemCategories.length}
-          </span>
+          <ChevronLeft className="w-4 h-4" />
         </button>
 
+        {/* Scroll Right Button */}
         <button
-          onClick={() => { setActiveSubTab('raw'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'raw'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
+          type="button"
+          onClick={() => handleScroll('right')}
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white/95 border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-indigo-600 hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all cursor-pointer ${
+            canScrollRight ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
+          title={isAr ? 'تمرير لليمين' : 'Scroll right'}
+          aria-label="Scroll right"
         >
-          <Layers className="w-3.5 h-3.5" />
-          <span>{isAr ? 'المواد الخام' : 'Raw Materials'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {rawMaterials.length}
-          </span>
+          <ChevronRight className="w-4 h-4" />
         </button>
 
-        <button
-          onClick={() => { setActiveSubTab('products'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'products'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
+        {/* Gradient edge fades to subtly hint at more tabs */}
+        <div
+          className={`pointer-events-none absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white via-white/80 to-transparent z-5 rounded-l-2xl transition-opacity duration-200 ${
+            canScrollLeft ? 'opacity-100' : 'opacity-0'
           }`}
-        >
-          <Package className="w-3.5 h-3.5" />
-          <span>{isAr ? 'المنتجات' : 'Products'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {products.length}
-          </span>
-        </button>
+        />
+        <div
+          className={`pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white via-white/80 to-transparent z-5 rounded-r-2xl transition-opacity duration-200 ${
+            canScrollRight ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
 
-        <button
-          onClick={() => { setActiveSubTab('boms'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'boms'
-              ? 'bg-purple-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
+        {/* Scrollable Tabs Track */}
+        <div
+          ref={tabsContainerRef}
+          className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 px-2 text-xs custom-nav-scrollbar scroll-smooth"
         >
-          <Boxes className="w-3.5 h-3.5" />
-          <span>{isAr ? 'قوائم المواد (BOM)' : 'BOM Formulas'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {boms.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('categories'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'categories'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm ring-2 ring-indigo-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Bookmark className="w-4 h-4 text-indigo-300" />
+            <span>{isAr ? 'مجموعات الأصناف وطرق التقييم' : 'Item Groups & Valuation'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'categories' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {itemCategories.length}
+            </span>
+          </button>
 
-        <button
-          onClick={() => { setActiveSubTab('warehouses'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'warehouses'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
-        >
-          <Building2 className="w-3.5 h-3.5" />
-          <span>{isAr ? 'المستودعات والمواقع' : 'Warehouses'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {warehouses.length + locations.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('raw'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'raw'
+                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-sm ring-2 ring-blue-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-blue-300" />
+            <span>{isAr ? 'المواد الخام' : 'Raw Materials'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'raw' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {rawMaterials.length}
+            </span>
+          </button>
 
-        <button
-          onClick={() => { setActiveSubTab('machines'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'machines'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
-        >
-          <Cog className="w-3.5 h-3.5" />
-          <span>{isAr ? 'الماكينات ومراكز التشغيل' : 'Machines'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {machines.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('products'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'products'
+                ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm ring-2 ring-emerald-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Package className="w-4 h-4 text-emerald-300" />
+            <span>{isAr ? 'المنتجات' : 'Products'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'products' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {products.length}
+            </span>
+          </button>
 
-        <button
-          onClick={() => { setActiveSubTab('partners'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'partners'
-              ? 'bg-teal-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>{isAr ? 'الشركاء (عملاء وموردين)' : 'Partners'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {customers.length + suppliers.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('boms'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'boms'
+                ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-sm ring-2 ring-purple-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Boxes className="w-4 h-4 text-purple-300" />
+            <span>{isAr ? 'قوائم المواد (BOM)' : 'BOM Formulas'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'boms' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {boms.length}
+            </span>
+          </button>
 
-        <button
-          onClick={() => { setActiveSubTab('uoms'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'uoms'
-              ? 'bg-orange-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
-        >
-          <Scale className="w-3.5 h-3.5" />
-          <span>{isAr ? 'وحدات القياس' : 'UOM'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {uoms.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('warehouses'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'warehouses'
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-700 text-white shadow-sm ring-2 ring-cyan-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-cyan-300" />
+            <span>{isAr ? 'المستودعات والمواقع' : 'Warehouses'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'warehouses' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {warehouses.length + locations.length}
+            </span>
+          </button>
 
-        <button
-          onClick={() => { setActiveSubTab('currencies'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'currencies'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
-        >
-          <DollarSign className="w-3.5 h-3.5" />
-          <span>{isAr ? 'العملات والصرف' : 'Currencies'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {currencies.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('machines'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'machines'
+                ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-sm ring-2 ring-amber-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Cog className="w-4 h-4 text-amber-300" />
+            <span>{isAr ? 'الماكينات ومراكز التشغيل' : 'Machines'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'machines' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {machines.length}
+            </span>
+          </button>
 
-        <button
-          onClick={() => { setActiveSubTab('users'); setSearchTerm(''); }}
-          className={`px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition whitespace-nowrap ${
-            activeSubTab === 'users'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200/60'
-          }`}
-        >
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>{isAr ? 'المستخدمين والأدوار' : 'Users & Roles'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
-            {users.length}
-          </span>
-        </button>
+          <button
+            onClick={() => { setActiveSubTab('partners'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'partners'
+                ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-sm ring-2 ring-teal-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Users className="w-4 h-4 text-teal-300" />
+            <span>{isAr ? 'الشركاء (عملاء وموردين)' : 'Partners'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'partners' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {customers.length + suppliers.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => { setActiveSubTab('uoms'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'uoms'
+                ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-sm ring-2 ring-orange-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Scale className="w-4 h-4 text-orange-300" />
+            <span>{isAr ? 'وحدات القياس' : 'UOM'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'uoms' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {uoms.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => { setActiveSubTab('currencies'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'currencies'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm ring-2 ring-emerald-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 text-emerald-300" />
+            <span>{isAr ? 'العملات والصرف' : 'Currencies'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'currencies' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {currencies.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => { setActiveSubTab('users'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'users'
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-sm ring-2 ring-indigo-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-300" />
+            <span>{isAr ? 'المستخدمين والأدوار' : 'Users & Roles'}</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+              activeSubTab === 'users' ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-700'
+            }`}>
+              {users.length}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Global Search Filter */}

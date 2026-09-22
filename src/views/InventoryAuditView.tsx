@@ -69,7 +69,25 @@ export const InventoryAuditView: React.FC = () => {
   } = useApp();
   const isAr = language === 'ar';
 
-  const [activeTab, setActiveTab] = useState<ReportTab>('balance');
+  const [activeTab, setActiveTab] = useState<ReportTab>(() => {
+    try {
+      const saved = localStorage.getItem('mrp_reports_tab') as ReportTab | null;
+      const validTabs: ReportTab[] = [
+        'ledger', 'balance', 'production', 'consumption',
+        'scrap', 'landed', 'cost-impact', 'audit-log'
+      ];
+      if (saved && validTabs.includes(saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'balance';
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('mrp_reports_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
