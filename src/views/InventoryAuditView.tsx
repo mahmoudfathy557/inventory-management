@@ -487,6 +487,7 @@ export const InventoryAuditView: React.FC = () => {
       isAr ? 'الوارد' : 'Qty In',
       isAr ? 'المنصرف' : 'Qty Out',
       isAr ? 'رصيد الكمية' : 'Balance Qty',
+      isAr ? 'قيمة الحركة (ج.م)' : 'Txn Value (EGP)',
       isAr ? 'متوسط التكلفة' : 'MAC Cost',
       isAr ? 'قيمة المخزون الجاري' : 'Running Value',
       isAr ? 'المُحرر' : 'Created By'
@@ -501,6 +502,7 @@ export const InventoryAuditView: React.FC = () => {
       e.qtyIn,
       e.qtyOut,
       e.balanceQty,
+      e.transactionValueEGP,
       e.movingAverageCostEGP,
       e.runningInventoryValueEGP,
       e.createdBy
@@ -560,6 +562,16 @@ export const InventoryAuditView: React.FC = () => {
       headerEn: 'Qty In',
       render: e => {
         const itemUom = e.uom || (rawMaterials.find(m => m.id === e.itemId)?.defaultUOM) || (products.find(p => p.id === e.itemId)?.defaultUOM) || 'KG';
+        if (e.transactionType === TransactionType.LANDED_COST) {
+          return (
+            <span
+              className="text-[10px] font-mono font-bold text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded"
+              title={isAr ? 'إضافة تكلفة بدون كمية' : 'Cost addition without qty'}
+            >
+              {isAr ? '0 (تكلفة فقط)' : '0 (Cost Only)'}
+            </span>
+          );
+        }
         return e.qtyIn > 0 ? (
           <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
             +{formatNumber(e.qtyIn, language)} {itemUom}
@@ -599,6 +611,40 @@ export const InventoryAuditView: React.FC = () => {
         );
       },
       exportValue: e => e.balanceQty
+    },
+    {
+      key: 'transactionValueEGP',
+      headerAr: 'قيمة الحركة (ج.م)',
+      headerEn: 'Txn Value (EGP)',
+      render: e => {
+        if (e.transactionType === TransactionType.LANDED_COST) {
+          return (
+            <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+              +{formatCurrency(e.transactionValueEGP, language)}
+            </span>
+          );
+        }
+        if (e.qtyIn > 0 || e.transactionType === TransactionType.PURCHASE_RECEIPT) {
+          return (
+            <span className="font-mono font-bold text-emerald-700">
+              +{formatCurrency(e.transactionValueEGP, language)}
+            </span>
+          );
+        }
+        if (e.qtyOut > 0) {
+          return (
+            <span className="font-mono font-bold text-rose-700">
+              -{formatCurrency(e.transactionValueEGP, language)}
+            </span>
+          );
+        }
+        return e.transactionValueEGP > 0 ? (
+          <span className="font-mono text-slate-700">{formatCurrency(e.transactionValueEGP, language)}</span>
+        ) : (
+          <span className="text-slate-300">-</span>
+        );
+      },
+      exportValue: e => e.transactionValueEGP
     },
     {
       key: 'movingAverageCostEGP',

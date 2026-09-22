@@ -11,7 +11,8 @@ import {
   X,
   ArrowRightLeft,
   ArrowDownLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  DollarSign
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
@@ -231,7 +232,41 @@ export const InventoryBalanceReport: React.FC = () => {
   // Drilldown entries for selected item
   const drillDownEntries = useMemo(() => {
     if (!drillDownItem) return [];
-    return ledgerEntries.filter(e => e.itemId === drillDownItem.id);
+    const entries = ledgerEntries.filter(e => e.itemId === drillDownItem.id);
+
+    // Track running balance and value defensively to protect against zeroed values
+    let runningQty = 0;
+    let runningVal = 0;
+
+    return entries.map(entry => {
+      const isLandedCost = entry.transactionType === TransactionType.LANDED_COST;
+
+      let balanceQty = entry.balanceQty;
+      let runningInventoryVal = entry.runningInventoryValueEGP;
+      let mac = entry.movingAverageCostEGP;
+
+      if (isLandedCost) {
+        if ((!balanceQty || balanceQty === 0) && runningQty > 0) {
+          balanceQty = runningQty;
+        }
+        if ((!runningInventoryVal || runningInventoryVal === 0) && (entry.transactionValueEGP > 0 || runningVal > 0)) {
+          runningInventoryVal = runningVal + (entry.transactionValueEGP || 0);
+        }
+        if ((!mac || mac === 0) && balanceQty > 0 && runningInventoryVal > 0) {
+          mac = runningInventoryVal / balanceQty;
+        }
+      }
+
+      if (balanceQty > 0) runningQty = balanceQty;
+      if (runningInventoryVal > 0) runningVal = runningInventoryVal;
+
+      return {
+        ...entry,
+        balanceQty,
+        runningInventoryValueEGP: runningInventoryVal,
+        movingAverageCostEGP: mac
+      };
+    });
   }, [drillDownItem, ledgerEntries]);
 
   return (
@@ -410,96 +445,227 @@ export const InventoryBalanceReport: React.FC = () => {
       </div>
 
       {/* Drill-down Modal (Section 29 requirement: Allow drill-down into underlying transactions) */}
-      {drillDownItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-5 shadow-xl border border-slate-200 max-h-[85vh] flex flex-col space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <span>{isAr ? 'تفاصيل حركات الصنف (Drill-Down)' : 'Transaction History'}</span>
-                  <span className="font-mono text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
-                    {drillDownItem.code}
-                  </span>
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                  <span>{drillDownItem.name}</span>
-                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    {isAr ? 'الوحدة الموحدة: ' : 'Unified Base UOM: '}
-                    {filteredRows.find(r => r.itemId === drillDownItem.id)?.uom || 'KG'}
-                  </span>
-                </p>
+      {drillDownItem && (() => {
+        const itemRow = filteredRows.find(r => r.itemId === drillDownItem.id);
+        const itemUom = itemRow?.uom || 'KG';
+        const totalLandedCostAllocated = drillDownEntries
+          .filter(e => e.transactionType === TransactionType.LANDED_COST)
+          .reduce((sum, e) => sum + (e.transactionValueEGP || 0), 0);
+        const lastEntry = drillDownEntries.length > 0 ? drillDownEntries[drillDownEntries.length - 1] : null;
+        const currentBalance = lastEntry ? lastEntry.balanceQty : (itemRow?.closingQty || 0);
+        const currentMAC = lastEntry ? lastEntry.movingAverageCostEGP : (itemRow?.movingAverageCost || 0);
+        const currentValuation = lastEntry ? lastEntry.runningInventoryValueEGP : (itemRow?.closingValue || 0);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl max-w-5xl w-full p-5 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              {/* Modal Header */}
+              <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">
+                      {isAr ? 'تفاصيل حركات الصنف وسجل التكلفة (Transaction History)' : 'Item Transaction & Costing History'}
+                    </h4>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded border border-blue-200">
+                      {drillDownItem.code}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-800">{drillDownItem.name}</span>
+                    <span>•</span>
+                    <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      {isAr ? 'الوحدة الموحدة: ' : 'Unified Base UOM: '} {itemUom}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDrillDownItem(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                  title={isAr ? 'إغلاق' : 'Close'}
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setDrillDownItem(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <table className="w-full text-right text-xs">
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="p-2">{isAr ? 'التاريخ' : 'Date'}</th>
-                    <th className="p-2">{isAr ? 'رقم المستند' : 'Doc No'}</th>
-                    <th className="p-2">{isAr ? 'نوع الحركة' : 'Type'}</th>
-                    <th className="p-2">{isAr ? 'المستودع' : 'Warehouse'}</th>
-                    <th className="p-2 text-center text-emerald-700">{isAr ? 'وارد' : 'In'}</th>
-                    <th className="p-2 text-center text-rose-700">{isAr ? 'منصرف' : 'Out'}</th>
-                    <th className="p-2 text-center font-bold">{isAr ? 'رصيد الحركة' : 'Balance'}</th>
-                    <th className="p-2">{isAr ? 'متوسط التكلفة' : 'MAC'}</th>
-                    <th className="p-2 font-bold text-emerald-800">{isAr ? 'القيمة التراكمية' : 'Running Value'}</th>
-                    <th className="p-2">{isAr ? 'المستخدم' : 'User'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {drillDownEntries.map((e, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="p-2 font-mono">{e.date}</td>
-                      <td className="p-2 font-mono font-bold text-blue-600">{e.documentNumber}</td>
-                      <td className="p-2 text-slate-700">{e.transactionType}</td>
-                      <td className="p-2 text-slate-600">{e.warehouseName}</td>
-                      <td className="p-2 text-center font-mono text-emerald-700">
-                        {e.qtyIn > 0 ? formatNumber(e.qtyIn, language) : '-'}
-                      </td>
-                      <td className="p-2 text-center font-mono text-rose-700">
-                        {e.qtyOut > 0 ? formatNumber(e.qtyOut, language) : '-'}
-                      </td>
-                      <td className="p-2 text-center font-mono font-bold text-slate-900">
-                        {formatNumber(e.balanceQty, language)}
-                      </td>
-                      <td className="p-2 font-mono text-slate-600">
-                        {formatCurrency(e.movingAverageCostEGP, language)}
-                      </td>
-                      <td className="p-2 font-mono font-bold text-emerald-700">
-                        {formatCurrency(e.runningInventoryValueEGP, language)}
-                      </td>
-                      <td className="p-2 text-slate-500">{e.createdBy}</td>
-                    </tr>
-                  ))}
-                  {drillDownEntries.length === 0 && (
+              {/* Quick Summary KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200">
+                  <span className="text-slate-500 block text-[11px]">{isAr ? 'رصيد المخزون الحالي' : 'Current Stock Balance'}</span>
+                  <span className="font-mono font-bold text-sm text-slate-900 mt-0.5 block">
+                    {formatNumber(currentBalance, language)} {itemUom}
+                  </span>
+                </div>
+                <div className="bg-blue-50/60 rounded-xl p-2.5 border border-blue-100">
+                  <span className="text-blue-700 block text-[11px] font-medium">{isAr ? 'متوسط التكلفة المتحرك (MAC)' : 'Current MAC'}</span>
+                  <span className="font-mono font-bold text-sm text-blue-900 mt-0.5 block">
+                    {formatCurrency(currentMAC, language)}
+                  </span>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-2.5 border border-emerald-100">
+                  <span className="text-emerald-700 block text-[11px] font-medium">{isAr ? 'إجمالي قيمة المخزون الجاري' : 'Total Inventory Valuation'}</span>
+                  <span className="font-mono font-bold text-sm text-emerald-900 mt-0.5 block">
+                    {formatCurrency(currentValuation, language)}
+                  </span>
+                </div>
+                <div className="bg-purple-50/60 rounded-xl p-2.5 border border-purple-100">
+                  <span className="text-purple-700 block text-[11px] font-medium">{isAr ? 'تكاليف الإنزال المضافة' : 'Landed Costs Added'}</span>
+                  <span className="font-mono font-bold text-sm text-purple-900 mt-0.5 block">
+                    {totalLandedCostAllocated > 0 ? `+${formatCurrency(totalLandedCostAllocated, language)}` : '0.00 ج.م'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Transactions Table */}
+              <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-100/80 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
                     <tr>
-                      <td colSpan={10} className="p-6 text-center text-slate-400">
-                        {isAr ? 'لا توجد حركات مسجلة لهذا الصنف' : 'No recorded movements for this item'}
-                      </td>
+                      <th className="p-2.5">{isAr ? 'التاريخ' : 'Date'}</th>
+                      <th className="p-2.5">{isAr ? 'رقم المستند' : 'Doc No'}</th>
+                      <th className="p-2.5">{isAr ? 'نوع الحركة' : 'Type'}</th>
+                      <th className="p-2.5">{isAr ? 'المستودع' : 'Warehouse'}</th>
+                      <th className="p-2.5 text-center text-emerald-700">{isAr ? 'وارد (كمية)' : 'In (Qty)'}</th>
+                      <th className="p-2.5 text-center text-rose-700">{isAr ? 'منصرف (كمية)' : 'Out (Qty)'}</th>
+                      <th className="p-2.5 text-center font-bold text-slate-900">{isAr ? 'رصيد الكمية' : 'Balance Qty'}</th>
+                      <th className="p-2.5 text-center font-bold text-purple-800 bg-purple-50/50">{isAr ? 'قيمة الحركة' : 'Txn Value'}</th>
+                      <th className="p-2.5 font-bold text-blue-900">{isAr ? 'متوسط التكلفة' : 'MAC'}</th>
+                      <th className="p-2.5 font-bold text-emerald-800">{isAr ? 'القيمة التراكمية' : 'Running Value'}</th>
+                      <th className="p-2.5">{isAr ? 'المستخدم' : 'User'}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {drillDownEntries.map((e, idx) => {
+                      const isLandedCost = e.transactionType === TransactionType.LANDED_COST;
+                      const isPurchaseReceipt = e.transactionType === TransactionType.PURCHASE_RECEIPT;
+                      const isOutMovement = e.qtyOut > 0;
 
-            <div className="flex justify-end pt-3 border-t border-slate-100">
-              <button
-                onClick={() => setDrillDownItem(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-              >
-                {isAr ? 'إغلاق' : 'Close'}
-              </button>
+                      return (
+                        <tr key={idx} className={`hover:bg-slate-50 transition-colors ${isLandedCost ? 'bg-purple-50/20' : ''}`}>
+                          <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">{e.date}</td>
+                          <td className="p-2.5 font-mono font-bold text-blue-600 whitespace-nowrap">
+                            {e.documentNumber}
+                          </td>
+                          <td className="p-2.5 whitespace-nowrap">
+                            {isLandedCost ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                                <DollarSign className="w-3 h-3 text-purple-600" />
+                                {isAr ? 'تكلفة إنزال (Landed Cost)' : 'Landed Cost'}
+                              </span>
+                            ) : isPurchaseReceipt ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                {isAr ? 'إذن إضافة مشتريات' : 'Purchase Receipt'}
+                              </span>
+                            ) : (
+                              <span className="font-medium text-slate-700">{e.transactionType}</span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-slate-600 whitespace-nowrap">{e.warehouseName}</td>
+
+                          {/* In Column */}
+                          <td className="p-2.5 text-center font-mono whitespace-nowrap">
+                            {isLandedCost ? (
+                              <span
+                                className="text-[10px] font-mono font-bold text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded"
+                                title={isAr ? 'إضافة قيمة فقط دون زيادة الكمية' : 'Value-only adjustment without adding physical stock'}
+                              >
+                                {isAr ? '0 (تكلفة فقط)' : '0 (Cost Only)'}
+                              </span>
+                            ) : e.qtyIn > 0 ? (
+                              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                +{formatNumber(e.qtyIn, language)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+
+                          {/* Out Column */}
+                          <td className="p-2.5 text-center font-mono whitespace-nowrap">
+                            {e.qtyOut > 0 ? (
+                              <span className="font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">
+                                -{formatNumber(e.qtyOut, language)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+
+                          {/* Balance Qty Column */}
+                          <td className="p-2.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded">
+                              {formatNumber(e.balanceQty, language)} {e.uom || itemUom}
+                            </span>
+                          </td>
+
+                          {/* Transaction Value Column (Explicitly requested by user) */}
+                          <td className="p-2.5 text-center font-mono whitespace-nowrap">
+                            {isLandedCost ? (
+                              <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 shadow-2xs">
+                                +{formatCurrency(e.transactionValueEGP, language)}
+                              </span>
+                            ) : isPurchaseReceipt || (e.qtyIn > 0 && e.transactionValueEGP > 0) ? (
+                              <span className="font-bold text-emerald-700">
+                                +{formatCurrency(e.transactionValueEGP, language)}
+                              </span>
+                            ) : isOutMovement && e.transactionValueEGP > 0 ? (
+                              <span className="font-bold text-rose-700">
+                                -{formatCurrency(e.transactionValueEGP, language)}
+                              </span>
+                            ) : e.transactionValueEGP > 0 ? (
+                              <span className="font-semibold text-slate-700">
+                                {formatCurrency(e.transactionValueEGP, language)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+
+                          {/* Moving Average Cost (MAC) */}
+                          <td className="p-2.5 font-mono font-semibold text-blue-950 whitespace-nowrap">
+                            {formatCurrency(e.movingAverageCostEGP, language)}
+                          </td>
+
+                          {/* Running Inventory Value */}
+                          <td className="p-2.5 font-mono font-bold text-emerald-800 whitespace-nowrap">
+                            <span className="bg-emerald-50/80 px-2 py-0.5 rounded border border-emerald-100">
+                              {formatCurrency(e.runningInventoryValueEGP, language)}
+                            </span>
+                          </td>
+
+                          {/* Created By User */}
+                          <td className="p-2.5 text-slate-500 whitespace-nowrap">{e.createdBy}</td>
+                        </tr>
+                      );
+                    })}
+                    {drillDownEntries.length === 0 && (
+                      <tr>
+                        <td colSpan={11} className="p-8 text-center text-slate-400">
+                          {isAr ? 'لا توجد حركات مسجلة لهذا الصنف' : 'No recorded movements for this item'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <span className="text-[11px] text-slate-500">
+                  {isAr
+                    ? 'يتم تحديث الرصيد ومتوسط التكلفة المتحرك (MAC) آلياً مع كل إذن استلام أو تكلفة إنزال.'
+                    : 'Inventory balance and Moving Average Cost (MAC) are automatically updated with each receipt and landed cost.'}
+                </span>
+                <button
+                  onClick={() => setDrillDownItem(null)}
+                  className="px-5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition shadow-2xs"
+                >
+                  {isAr ? 'إغلاق' : 'Close'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Dedicated Print Preview Modal for Inventory Balances */}
       <PrintPreviewModal

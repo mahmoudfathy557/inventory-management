@@ -290,6 +290,81 @@ function saveStorage<T>(key: string, data: T) {
   }
 }
 
+/**
+ * Auto-heals and normalizes inventory ledger entries:
+ * Specifically for LANDED_COST transactions where balanceQty, runningInventoryValueEGP,
+ * or MAC might have been stored as 0 due to asynchronous state batching in prior versions.
+ */
+function healLedgerEntries(
+  entries: InventoryLedgerEntry[],
+  rawMats: RawMaterial[],
+  prods: Product[],
+  rcpts: InventoryReceipt[]
+): InventoryLedgerEntry[] {
+  if (!entries || entries.length === 0) return entries;
+  let hasChanges = false;
+
+  const healed = entries.map((entry, idx) => {
+    if (entry.transactionType === TransactionType.LANDED_COST) {
+      if (
+        entry.balanceQty === 0 ||
+        entry.runningInventoryValueEGP === 0 ||
+        entry.movingAverageCostEGP === 0 ||
+        !entry.uom ||
+        entry.itemCode === entry.itemId
+      ) {
+        hasChanges = true;
+        // Find preceding entry for the same item in the ledger
+        let prevEntry: InventoryLedgerEntry | undefined;
+        for (let j = idx - 1; j >= 0; j--) {
+          if (entries[j].itemId === entry.itemId) {
+            prevEntry = entries[j];
+            break;
+          }
+        }
+
+        const item = rawMats.find(m => m.id === entry.itemId) || prods.find(p => p.id === entry.itemId);
+        const receipt = rcpts.find(
+          r => r.receiptNumber === entry.reference || r.id === entry.reference || r.itemId === entry.itemId
+        );
+
+        const balanceQty = (prevEntry && prevEntry.balanceQty > 0)
+          ? prevEntry.balanceQty
+          : (item?.currentQty || receipt?.baseQuantity || receipt?.quantity || entry.balanceQty);
+
+        const baseVal = (prevEntry && prevEntry.runningInventoryValueEGP > 0)
+          ? prevEntry.runningInventoryValueEGP
+          : (receipt?.totalValueEGP || (balanceQty * (item?.movingAverageCost || 0)));
+
+        const runningVal = entry.runningInventoryValueEGP > 0
+          ? entry.runningInventoryValueEGP
+          : (baseVal + (entry.transactionValueEGP || 0));
+
+        const mac = entry.movingAverageCostEGP > 0
+          ? entry.movingAverageCostEGP
+          : (balanceQty > 0 ? (runningVal / balanceQty) : (item?.movingAverageCost || 0));
+
+        const uom = entry.uom || prevEntry?.uom || receipt?.baseUOM || receipt?.uom || item?.defaultUOM || 'KG';
+        const itemCode = (item?.code) || prevEntry?.itemCode || receipt?.itemCode || entry.itemCode;
+        const itemName = (item?.nameAr) || prevEntry?.itemName || receipt?.itemName || entry.itemName;
+
+        return {
+          ...entry,
+          balanceQty,
+          runningInventoryValueEGP: runningVal,
+          movingAverageCostEGP: mac,
+          uom,
+          itemCode,
+          itemName
+        };
+      }
+    }
+    return entry;
+  });
+
+  return hasChanges ? healed : entries;
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => loadStorage<Language>('lang', 'ar'));
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
@@ -341,7 +416,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [customerDeliveries, setCustomerDeliveries] = useState<CustomerDelivery[]>(() => loadStorage('customerDeliveries', INITIAL_CUSTOMER_DELIVERIES));
   const [costAdjustments, setCostAdjustments] = useState<ProductionOrderCostAdjustment[]>(() => loadStorage('costAdjustments', INITIAL_COST_ADJUSTMENTS));
 
-  const [ledgerEntries, setLedgerEntries] = useState<InventoryLedgerEntry[]>(() => loadStorage('ledgerEntries', INITIAL_LEDGER_ENTRIES));
+  const [ledgerEntries, setLedgerEntries] = useState<InventoryLedgerEntry[]>(() => {
+    const loaded = loadStorage<InventoryLedgerEntry[]>('ledgerEntries', INITIAL_LEDGER_ENTRIES);
+    const loadedRMs = loadStorage<RawMaterial[]>('rawMaterials', INITIAL_RAW_MATERIALS);
+    const loadedProds = loadStorage<Product[]>('products', INITIAL_PRODUCTS);
+    const loadedRcpts = loadStorage<InventoryReceipt[]>('receipts', INITIAL_RECEIPTS);
+    return healLedgerEntries(loaded, loadedRMs, loadedProds, loadedRcpts);
+  });
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => loadStorage('auditLogs', INITIAL_AUDIT_LOGS));
 
   const [odooConfig, setOdooConfig] = useState<OdooConfig>(() => loadStorage('odooConfig', INITIAL_ODOO_CONFIG));
@@ -587,41 +668,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return r;
     }));
 
-    // Update Item Moving Average Cost (Quantity unchanged, Value increases)
-    let currentQty = 0;
-    let newTotalVal = 0;
-    let newMAC = 0;
-    let targetWhId = 'wh-raw';
+    // Find receipt and item synchronously from current state
+    const origReceipt = receipts.find(r => r.id === data.originalReceiptId);
+    const targetItem = rawMaterials.find(m => m.id === data.itemId) || products.find(p => p.id === data.itemId);
 
-    setRawMaterials(prev => prev.map(item => {
-      if (item.id === data.itemId) {
-        currentQty = item.currentQty || 0;
-        newTotalVal = (item.totalValue || 0) + data.amountEGP;
-        newMAC = currentQty > 0 ? newTotalVal / currentQty : item.movingAverageCost;
-        targetWhId = item.defaultWarehouseId;
-        return {
-          ...item,
-          totalValue: newTotalVal,
-          movingAverageCost: newMAC
-        };
-      }
-      return item;
-    }));
+    const targetWhId = origReceipt?.warehouseId || targetItem?.defaultWarehouseId || 'wh-raw';
+    const wh = warehouses.find(w => w.id === targetWhId);
+    const itemCode = targetItem?.code || origReceipt?.itemCode || data.itemId;
+    const itemName = (language === 'ar' ? targetItem?.nameAr : targetItem?.nameEn) || origReceipt?.itemName || data.itemName;
+    const itemUom = origReceipt?.baseUOM || origReceipt?.uom || targetItem?.defaultUOM || 'KG';
+
+    // Synchronously compute current quantity and updated value/MAC
+    const currentQty = targetItem?.currentQty ?? (origReceipt?.baseQuantity || origReceipt?.quantity || 0);
+    const oldTotalVal = targetItem?.totalValue ?? (origReceipt?.totalValueEGP || 0);
+    const newTotalVal = oldTotalVal + data.amountEGP;
+    const newMAC = currentQty > 0 ? (newTotalVal / currentQty) : (targetItem?.movingAverageCost || 0);
+
+    // Update Item Moving Average Cost (Quantity unchanged, Value increases)
+    if (rawMaterials.some(m => m.id === data.itemId)) {
+      setRawMaterials(prev => prev.map(item => {
+        if (item.id === data.itemId) {
+          return {
+            ...item,
+            totalValue: newTotalVal,
+            movingAverageCost: newMAC
+          };
+        }
+        return item;
+      }));
+    } else {
+      setProducts(prev => prev.map(item => {
+        if (item.id === data.itemId) {
+          return {
+            ...item,
+            totalValue: newTotalVal,
+            movingAverageCost: newMAC
+          };
+        }
+        return item;
+      }));
+    }
 
     // Add to Inventory Ledger (Section 13 & 36)
-    const wh = warehouses.find(w => w.id === targetWhId);
     const ledgerEntry: InventoryLedgerEntry = {
       id: 'ledg-' + Date.now(),
       date: newLandedCost.createdDate,
       itemId: data.itemId,
-      itemCode: data.itemId,
-      itemName: data.itemName,
-      itemType: ItemType.RAW_MATERIAL,
+      itemCode: itemCode,
+      itemName: itemName,
+      itemType: targetItem ? ((targetItem as any).itemType || ItemType.RAW_MATERIAL) : ItemType.RAW_MATERIAL,
       warehouseId: targetWhId,
-      warehouseName: wh ? (language === 'ar' ? wh.nameAr : wh.nameEn) : 'مستودع الخام',
+      warehouseName: wh ? (language === 'ar' ? wh.nameAr : wh.nameEn) : (language === 'ar' ? 'مستودع المواد الخام الرئيسي' : 'Main Raw Materials Warehouse'),
       transactionType: TransactionType.LANDED_COST,
       documentNumber: nextNum,
       reference: data.originalReceiptNumber,
+      uom: itemUom,
       qtyIn: 0,
       qtyOut: 0,
       balanceQty: currentQty,
@@ -630,13 +731,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: newMAC,
       createdBy: currentUser?.fullName || 'System User',
-      notes: `${data.costType} - زيادة القيمة وتحديث متوسط التكلفة بدون زيادة الكمية`
+      notes: `${data.costType} - زيادة القيمة وتحديث متوسط التكلفة بدون زيادة الكمية (+${data.amountEGP.toLocaleString('en-US')} ج.م)`
     };
 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setLandedCosts(prev => [newLandedCost, ...prev]);
 
-    logAudit('POST_LANDED_COST', 'تكلفة إنزال', nextNum, `إضافة ${data.amountEGP.toLocaleString('en-US')} ج.م على الصنف ${data.itemName}. متوسط التكلفة الجديد: ${newMAC.toFixed(3)} ج.م`);
+    logAudit('POST_LANDED_COST', 'تكلفة إنزال', nextNum, `إضافة ${data.amountEGP.toLocaleString('en-US')} ج.م على الصنف ${itemName}. متوسط التكلفة الجديد: ${newMAC.toFixed(3)} ج.م`);
 
     return newLandedCost;
   };
