@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Truck,
   Plus,
@@ -7,7 +7,9 @@ import {
   X,
   RotateCw,
   CheckCircle,
-  ExternalLink
+  ExternalLink,
+  ArrowRightLeft,
+  Scale
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -17,6 +19,7 @@ import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { CustomerDelivery } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
+import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 
 export const CustomerDeliveriesView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -28,6 +31,7 @@ export const CustomerDeliveriesView: React.FC = () => {
     products,
     warehouses,
     customers,
+    uoms,
     currentUser
   } = useApp();
   const confirm = useConfirm();
@@ -43,23 +47,40 @@ export const CustomerDeliveriesView: React.FC = () => {
     warehouses.find(w => w.type === 'FINISHED_GOODS')?.id || 'wh-fg'
   );
   const [quantity, setQuantity] = useState(400);
+  const [selectedUOM, setSelectedUOM] = useState('');
   const [sellingPrice, setSellingPrice] = useState(180);
   const [salesOrderRef, setSalesOrderRef] = useState('SO-2026-089');
   const [notes, setNotes] = useState('');
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
   const selectedProduct = products.find(p => p.id === selectedProductId);
+  const itemBaseUOM = selectedProduct?.defaultUOM || 'KG';
 
-  // Moving Average Cost of FG (e.g. 122.222 EGP)
+  // Available UOMs for this product
+  const availableUOMs = getAvailableUOMsForItem(itemBaseUOM, uoms);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      setSelectedUOM(selectedProduct.defaultUOM || 'KG');
+    }
+  }, [selectedProductId]);
+
+  const activeTransactionUOM = selectedUOM || itemBaseUOM;
+  const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
+  const baseQuantity = quantity * conversionFactor;
+
+  // Moving Average Cost of FG (e.g. 122.222 EGP per base UOM)
   const currentMAC = selectedProduct?.movingAverageCost || 122.222;
-  const totalCostEGP = quantity * currentMAC;
+  const totalCostEGP = baseQuantity * currentMAC;
   const totalRevenueEGP = quantity * sellingPrice;
   const grossProfitEGP = totalRevenueEGP - totalCostEGP;
+
+  const isExceedingStock = baseQuantity > (selectedProduct?.currentQty || 0);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !selectedCustomer || quantity <= 0) return;
-    if (quantity > (selectedProduct.currentQty || 0)) {
+    if (isExceedingStock) {
       return;
     }
 
@@ -72,7 +93,10 @@ export const CustomerDeliveriesView: React.FC = () => {
       productCode: selectedProduct.code,
       productName: selectedProduct.nameAr,
       quantity,
-      uom: selectedProduct.defaultUOM || 'KG',
+      uom: activeTransactionUOM,
+      conversionFactor,
+      baseQuantity,
+      baseUOM: itemBaseUOM,
       movingAverageCostEGP: currentMAC,
       totalDeliveryValueEGP: totalCostEGP,
       sellingPriceEGP: sellingPrice,
@@ -128,9 +152,16 @@ export const CustomerDeliveriesView: React.FC = () => {
       headerAr: 'الكمية المسلمة',
       headerEn: 'Delivered Qty',
       render: d => (
-        <span className="font-mono font-bold text-rose-700">
-          -{formatNumber(d.quantity, language)} {d.uom}
-        </span>
+        <div>
+          <span className="font-mono font-bold text-rose-700">
+            -{formatNumber(d.quantity, language)} {d.uom}
+          </span>
+          {d.conversionFactor && d.conversionFactor !== 1 && (
+            <div className="text-[10px] text-slate-500 font-mono">
+              = {formatNumber(d.baseQuantity != null ? d.baseQuantity : (d.quantity * d.conversionFactor), language)} {d.baseUOM || 'KG'}
+            </div>
+          )}
+        </div>
       ),
       exportValue: d => d.quantity
     },
@@ -315,47 +346,65 @@ export const CustomerDeliveriesView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Quantity & Selling Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Quantity, UOM & Selling Price */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? 'وحدة القياس للتسليم *' : 'Delivery UOM *'}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">({availableUOMs.length} {isAr ? 'متاحة' : 'avail'})</span>
+                  </label>
+                  <select
+                    value={activeTransactionUOM}
+                    onChange={e => setSelectedUOM(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-blue-500"
+                  >
+                    {availableUOMs.map(u => (
+                      <option key={u.id} value={u.code}>
+                        {u.code} - {u.nameAr} {u.conversionFactor && u.conversionFactor !== 1 ? `(×${u.conversionFactor})` : `(${isAr ? 'أساسية' : 'Base'})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? `الكمية المسلمة (${selectedProduct?.defaultUOM || 'KG'}) *` : 'Delivered Qty *'}
+                    {isAr ? `الكمية المسلمة (${activeTransactionUOM}) *` : `Delivered Qty (${activeTransactionUOM}) *`}
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0.0001"
                     step="any"
                     value={quantity}
                     onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
                     className={`w-full p-2 rounded-lg border font-mono font-bold ${
-                      quantity > (selectedProduct?.currentQty || 0)
+                      isExceedingStock
                         ? 'border-rose-300 bg-rose-50/50 text-rose-700'
                         : 'border-slate-200'
                     }`}
                     required
                   />
                   <div className="flex items-center justify-between text-[11px] mt-1">
-                    <span className="text-slate-500">{isAr ? 'الرصيد المتاح:' : 'Available Stock:'}</span>
+                    <span className="text-slate-500">{isAr ? 'رصيد المخزون الأساسي:' : 'Stock:'}</span>
                     <span className={`font-mono font-bold ${
-                      quantity > (selectedProduct?.currentQty || 0) ? 'text-rose-600' : 'text-emerald-600'
+                      isExceedingStock ? 'text-rose-600' : 'text-emerald-600'
                     }`}>
-                      {formatNumber(selectedProduct?.currentQty || 0, language)} {selectedProduct?.defaultUOM || 'KG'}
+                      {formatNumber(selectedProduct?.currentQty || 0, language)} {itemBaseUOM}
                     </span>
                   </div>
-                  {quantity > (selectedProduct?.currentQty || 0) && (
+                  {isExceedingStock && (
                     <div className="text-[10px] text-rose-600 font-bold mt-0.5">
-                      {isAr ? '⚠️ الكمية المطلوبة تتجاوز الرصيد المتاح بالمستودع' : '⚠️ Exceeds available stock'}
+                      {isAr ? `⚠️ تتجاوز الرصيد (${formatNumber(baseQuantity, language)} ${itemBaseUOM})` : '⚠️ Exceeds available stock'}
                     </div>
                   )}
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'سعر بيع الوحدة (EGP) *' : 'Selling Price (EGP) *'}
+                    {isAr ? `سعر بيع الوحدة (${activeTransactionUOM}) *` : `Selling Price (${activeTransactionUOM}) *`}
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0.01"
                     step="any"
                     value={sellingPrice}
                     onChange={e => setSellingPrice(parseFloat(e.target.value) || 0)}
@@ -364,6 +413,19 @@ export const CustomerDeliveriesView: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Conversion Preview Badge */}
+              {conversionFactor !== 1 && (
+                <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 text-blue-900 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{isAr ? 'معادلة التحويل للوحدة الأساسية للمخزون:' : 'Base Conversion:'}</span>
+                  </span>
+                  <span className="font-mono font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-blue-200">
+                    {formatUOMTransactionLabel(quantity, activeTransactionUOM, itemBaseUOM, conversionFactor, language)}
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

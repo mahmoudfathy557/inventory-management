@@ -1441,9 +1441,20 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                 className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md transition space-y-3"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 font-bold border border-orange-200">
-                    {u.code}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 font-bold border border-orange-200">
+                      {u.code}
+                    </span>
+                    {(u.uomType === 'PRIMARY' || (!u.baseUOM || u.baseUOM === u.code || u.conversionFactor === 1)) ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {isAr ? 'وحدة رئيسية' : 'Primary'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                        {isAr ? 'وحدة تابعة' : 'Secondary'}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => { setSelectedUOM(u); setIsUOMDuplicate(true); setIsUOMModalOpen(true); }}
@@ -1479,9 +1490,35 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                   <p className="text-xs text-slate-500 font-mono mt-0.5">{u.nameEn}</p>
                 </div>
 
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-slate-700">
-                  1 {u.code} = <strong className="text-orange-700">{u.conversionFactor}</strong> {u.baseUOM || 'KG'}
-                </div>
+                {(u.uomType === 'PRIMARY' || (!u.baseUOM || u.baseUOM === u.code || u.conversionFactor === 1)) ? (
+                  <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200/80 text-xs text-emerald-900 space-y-1">
+                    <div className="flex items-center justify-between font-bold">
+                      <span>{isAr ? 'وحدة أساسية للمخزون' : 'Base Inventory UOM'}</span>
+                      <span className="font-mono text-emerald-700 font-bold">معامل = 1.0</span>
+                    </div>
+                    {/* List child units if any */}
+                    {(() => {
+                      const childUnits = uoms.filter(c => c.baseUOM === u.code && c.code !== u.code);
+                      if (childUnits.length === 0) return null;
+                      return (
+                        <div className="text-[10px] text-slate-600 pt-1 border-t border-emerald-200/60">
+                          <span className="font-semibold text-emerald-800">{isAr ? 'الوحدات الفرعية المرتبطة بها:' : 'Sub-units:'} </span>
+                          {childUnits.map(c => `${c.nameAr} (${c.code})`).join('، ')}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs font-mono text-slate-800">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-sans text-[11px] font-semibold text-blue-900">{isAr ? 'معادلة الربط والتحويل:' : 'Conversion:'}</span>
+                      <span className="font-bold text-blue-700 bg-white px-1.5 py-0.5 rounded border border-blue-200 text-[10px]">
+                        تابعة لـ {u.baseUOM}
+                      </span>
+                    </div>
+                    1 {u.code} = <strong className="text-blue-700 font-bold">{u.conversionFactor}</strong> {u.baseUOM || 'KG'}
+                  </div>
+                )}
               </div>
             ))}
         </div>

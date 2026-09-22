@@ -113,10 +113,24 @@ export const INITIAL_LOCATIONS: ProductionLocation[] = [
 ];
 
 export const INITIAL_UOMS: UOM[] = [
-  { id: 'uom-kg', code: 'KG', nameAr: 'كيلوجرام', nameEn: 'Kilogram', conversionFactor: 1, active: true },
-  { id: 'uom-ton', code: 'TON', nameAr: 'طن متري', nameEn: 'Metric Ton', baseUOM: 'KG', conversionFactor: 1000, active: true },
-  { id: 'uom-mtr', code: 'MTR', nameAr: 'متر طولي', nameEn: 'Linear Meter', conversionFactor: 1, active: true },
-  { id: 'uom-pcs', code: 'PCS', nameAr: 'قطعة', nameEn: 'Pieces', conversionFactor: 1, active: true }
+  // أوزان (Weights): KG (Primary), TON, GM
+  { id: 'uom-kg', code: 'KG', nameAr: 'كيلوجرام', nameEn: 'Kilogram', uomType: 'PRIMARY', conversionFactor: 1, active: true },
+  { id: 'uom-ton', code: 'TON', nameAr: 'طن متري', nameEn: 'Metric Ton', uomType: 'SECONDARY', baseUOM: 'KG', conversionFactor: 1000, active: true },
+  { id: 'uom-gm', code: 'GM', nameAr: 'جرام', nameEn: 'Gram', uomType: 'SECONDARY', baseUOM: 'KG', conversionFactor: 0.001, active: true },
+
+  // أطوال (Lengths): MTR (Primary), ROLL, CM
+  { id: 'uom-mtr', code: 'MTR', nameAr: 'متر طولي', nameEn: 'Linear Meter', uomType: 'PRIMARY', conversionFactor: 1, active: true },
+  { id: 'uom-roll', code: 'ROLL', nameAr: 'رول / لفة (50 متر)', nameEn: 'Roll (50m)', uomType: 'SECONDARY', baseUOM: 'MTR', conversionFactor: 50, active: true },
+  { id: 'uom-cm', code: 'CM', nameAr: 'سنتيمتر', nameEn: 'Centimeter', uomType: 'SECONDARY', baseUOM: 'MTR', conversionFactor: 0.01, active: true },
+
+  // قطع وعددي (Discrete): PCS (Primary), DOZEN, BOX
+  { id: 'uom-pcs', code: 'PCS', nameAr: 'قطعة / حبة', nameEn: 'Pieces', uomType: 'PRIMARY', conversionFactor: 1, active: true },
+  { id: 'uom-box', code: 'BOX', nameAr: 'كرتونة (24 قطعة)', nameEn: 'Box (24 Pcs)', uomType: 'SECONDARY', baseUOM: 'PCS', conversionFactor: 24, active: true },
+  { id: 'uom-doz', code: 'DOZ', nameAr: 'دستة (12 قطعة)', nameEn: 'Dozen (12 Pcs)', uomType: 'SECONDARY', baseUOM: 'PCS', conversionFactor: 12, active: true },
+
+  // حجوم وسوائل (Liquids/Volume): LTR (Primary), BARREL
+  { id: 'uom-ltr', code: 'LTR', nameAr: 'لتر', nameEn: 'Liter', uomType: 'PRIMARY', conversionFactor: 1, active: true },
+  { id: 'uom-bbl', code: 'BBL', nameAr: 'برميل (200 لتر)', nameEn: 'Barrel (200L)', uomType: 'SECONDARY', baseUOM: 'LTR', conversionFactor: 200, active: true }
 ];
 
 export const INITIAL_CURRENCIES: Currency[] = [

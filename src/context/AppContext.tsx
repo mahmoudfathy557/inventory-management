@@ -306,7 +306,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>(() => loadStorage('warehouses', INITIAL_WAREHOUSES));
   const [locations, setLocations] = useState<ProductionLocation[]>(() => loadStorage('locations', INITIAL_LOCATIONS));
-  const [uoms, setUoms] = useState<UOM[]>(() => loadStorage('uoms', INITIAL_UOMS));
+  const [uoms, setUoms] = useState<UOM[]>(() => {
+    const loaded = loadStorage<UOM[]>('uoms', INITIAL_UOMS);
+    if (!loaded || loaded.length === 0) return INITIAL_UOMS;
+    const codes = new Set(loaded.map(u => u.code.toUpperCase()));
+    const merged: UOM[] = loaded.map(u => ({
+      ...u,
+      uomType: u.uomType || (u.baseUOM && u.baseUOM !== u.code ? 'SECONDARY' : 'PRIMARY')
+    }));
+    for (const init of INITIAL_UOMS) {
+      if (!codes.has(init.code.toUpperCase())) {
+        merged.push(init);
+      }
+    }
+    return merged;
+  });
   const [currencies, setCurrencies] = useState<Currency[]>(() => loadStorage('currencies', INITIAL_CURRENCIES));
   const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>(() => loadStorage('currencyRates', INITIAL_CURRENCY_RATES));
   const [itemCategories, setItemCategories] = useState<ItemCategory[]>(() => loadStorage('itemCategories', INITIAL_ITEM_CATEGORIES));
@@ -463,13 +477,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let newQty = 0;
     let newTotalVal = 0;
     let newMAC = 0;
+    const baseQtyToAdd = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
 
     if (data.itemType === ItemType.RAW_MATERIAL) {
       setRawMaterials(prev => prev.map(item => {
         if (item.id === data.itemId) {
           const oldQty = item.currentQty || 0;
           const oldVal = item.totalValue || 0;
-          newQty = oldQty + data.quantity;
+          newQty = oldQty + baseQtyToAdd;
           newTotalVal = oldVal + data.totalValueEGP;
           newMAC = newQty > 0 ? newTotalVal / newQty : 0;
           return {
@@ -486,7 +501,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (prod.id === data.itemId) {
           const oldQty = prod.currentQty || 0;
           const oldVal = prod.totalValue || 0;
-          newQty = oldQty + data.quantity;
+          newQty = oldQty + baseQtyToAdd;
           newTotalVal = oldVal + data.totalValueEGP;
           newMAC = newQty > 0 ? newTotalVal / newQty : 0;
           return {
@@ -515,7 +530,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionType: TransactionType.PURCHASE_RECEIPT,
       documentNumber: nextNum,
       reference: data.reference || data.supplierName,
-      qtyIn: data.quantity,
+      qtyIn: baseQtyToAdd,
       qtyOut: 0,
       balanceQty: newQty,
       unitCostEGP: data.unitPriceEGP,
@@ -523,13 +538,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: newMAC,
       createdBy: currentUser?.fullName || 'System User',
-      notes: data.notes
+      notes: [
+        data.notes,
+        data.conversionFactor && data.conversionFactor !== 1
+          ? `توريد بـ: ${data.quantity} ${data.uom} (= ${baseQtyToAdd} ${data.baseUOM || ''})`
+          : undefined
+      ].filter(Boolean).join(' | ')
     };
 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setReceipts(prev => [newReceipt, ...prev]);
 
-    logAudit('POST_RECEIPT', 'إذن إضافة مخزني', nextNum, `استلام ${data.quantity} ${data.uom} من صنف ${data.itemName} بقيمة ${data.totalValueEGP.toLocaleString('en-US')} ج.م`);
+    logAudit('POST_RECEIPT', 'إذن إضافة مخزني', nextNum, `استلام ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToAdd} ${data.baseUOM || ''}) ` : ''}من صنف ${data.itemName} بقيمة ${data.totalValueEGP.toLocaleString('en-US')} ج.م`);
 
     offlineSyncQueue.enqueueItem({
       actionType: 'GOODS_RECEIPT',
@@ -634,10 +654,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let newQty = 0;
     let newTotalVal = 0;
     const mac = data.movingAverageCostEGP;
+    const baseQtyToIssue = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
 
     setRawMaterials(prev => prev.map(item => {
       if (item.id === data.itemId) {
-        newQty = Math.max(0, (item.currentQty || 0) - data.quantity);
+        newQty = Math.max(0, (item.currentQty || 0) - baseQtyToIssue);
         newTotalVal = newQty * mac;
         return {
           ...item,
@@ -663,20 +684,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       documentNumber: nextNum,
       reference: data.reason,
       qtyIn: 0,
-      qtyOut: data.quantity,
+      qtyOut: baseQtyToIssue,
       balanceQty: newQty,
       unitCostEGP: mac,
       transactionValueEGP: data.totalIssueValueEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: mac,
       createdBy: currentUser?.fullName || 'System User',
-      notes: data.notes
+      notes: [
+        data.notes,
+        data.conversionFactor && data.conversionFactor !== 1
+          ? `صرف بـ: ${data.quantity} ${data.uom} (= ${baseQtyToIssue} ${data.baseUOM || ''})`
+          : undefined
+      ].filter(Boolean).join(' | ')
     };
 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setIssues(prev => [newIssue, ...prev]);
 
-    logAudit('POST_ISSUE', 'إذن صرف مخزني', nextNum, `صرف ${data.quantity} ${data.uom} من صنف ${data.itemName} بقيمة ${data.totalIssueValueEGP.toLocaleString('en-US')} ج.م`);
+    logAudit('POST_ISSUE', 'إذن صرف مخزني', nextNum, `صرف ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToIssue} ${data.baseUOM || ''}) ` : ''}من صنف ${data.itemName} بقيمة ${data.totalIssueValueEGP.toLocaleString('en-US')} ج.م`);
 
     offlineSyncQueue.enqueueItem({
       actionType: 'MATERIAL_ISSUE',
@@ -704,6 +730,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const fromWh = warehouses.find(w => w.id === data.fromWarehouseId);
     const toWh = warehouses.find(w => w.id === data.toWarehouseId);
+    const baseQtyToTransfer = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
 
     // Ledger 1: Transfer Out
     const ledgerOut: InventoryLedgerEntry = {
@@ -720,14 +747,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       documentNumber: nextNum,
       reference: `تحويل إلى ${toWh ? (language === 'ar' ? toWh.nameAr : toWh.nameEn) : ''}`,
       qtyIn: 0,
-      qtyOut: data.quantity,
+      qtyOut: baseQtyToTransfer,
       balanceQty: 0, // balance in source location
       unitCostEGP: data.unitCostEGP,
       transactionValueEGP: data.totalValueEGP,
       runningInventoryValueEGP: 0,
       movingAverageCostEGP: data.unitCostEGP,
       createdBy: currentUser?.fullName || 'System User',
-      notes: data.notes
+      notes: [
+        data.notes,
+        data.conversionFactor && data.conversionFactor !== 1
+          ? `تحويل بـ: ${data.quantity} ${data.uom} (= ${baseQtyToTransfer} ${data.baseUOM || ''})`
+          : undefined
+      ].filter(Boolean).join(' | ')
     };
 
     // Ledger 2: Transfer In
@@ -744,21 +776,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       transactionType: TransactionType.TRANSFER_IN,
       documentNumber: nextNum,
       reference: `تحويل من ${fromWh ? (language === 'ar' ? fromWh.nameAr : fromWh.nameEn) : ''}`,
-      qtyIn: data.quantity,
+      qtyIn: baseQtyToTransfer,
       qtyOut: 0,
-      balanceQty: data.quantity,
+      balanceQty: baseQtyToTransfer,
       unitCostEGP: data.unitCostEGP,
       transactionValueEGP: data.totalValueEGP,
       runningInventoryValueEGP: data.totalValueEGP,
       movingAverageCostEGP: data.unitCostEGP,
       createdBy: currentUser?.fullName || 'System User',
-      notes: data.notes
+      notes: [
+        data.notes,
+        data.conversionFactor && data.conversionFactor !== 1
+          ? `تحويل بـ: ${data.quantity} ${data.uom} (= ${baseQtyToTransfer} ${data.baseUOM || ''})`
+          : undefined
+      ].filter(Boolean).join(' | ')
     };
 
     setLedgerEntries(prev => [...prev, ledgerOut, ledgerIn]);
     setTransfers(prev => [newTransfer, ...prev]);
 
-    logAudit('POST_TRANSFER', 'تحويل مخزني', nextNum, `تحويل ${data.quantity} ${data.uom} من ${fromWh?.nameAr} إلى ${toWh?.nameAr}`);
+    logAudit('POST_TRANSFER', 'تحويل مخزني', nextNum, `تحويل ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToTransfer} ${data.baseUOM || ''}) ` : ''}من ${fromWh?.nameAr} إلى ${toWh?.nameAr}`);
 
     // Queue in Offline Sync Service Worker queue for Odoo synchronization
     offlineSyncQueue.enqueueItem({
@@ -845,10 +882,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let newQty = 0;
     let newTotalVal = 0;
     const mac = data.movingAverageCostEGP;
+    const baseQtyToIssue = data.baseQuantity != null ? data.baseQuantity : (data.actualQuantity * (data.conversionFactor || 1));
 
     setRawMaterials(prev => prev.map(item => {
       if (item.id === data.rawMaterialId) {
-        newQty = Math.max(0, (item.currentQty || 0) - data.actualQuantity);
+        newQty = Math.max(0, (item.currentQty || 0) - baseQtyToIssue);
         newTotalVal = newQty * mac;
         return {
           ...item,
@@ -868,7 +906,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (mat.rawMaterialId === data.rawMaterialId) {
             return {
               ...mat,
-              actualIssuedQty: (mat.actualIssuedQty || 0) + data.actualQuantity,
+              actualIssuedQty: (mat.actualIssuedQty || 0) + baseQtyToIssue,
               actualCostEGP: (mat.actualCostEGP || 0) + data.totalActualCostEGP
             };
           }
@@ -901,20 +939,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       documentNumber: nextNum,
       reference: data.productionOrderNumber,
       qtyIn: 0,
-      qtyOut: data.actualQuantity,
+      qtyOut: baseQtyToIssue,
       balanceQty: newQty,
       unitCostEGP: mac,
       transactionValueEGP: data.totalActualCostEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: mac,
       createdBy: currentUser?.fullName || 'System User',
-      notes: `صرف خامات لأمر الإنتاج ${data.productionOrderNumber}`
+      notes: [
+        `صرف خامات لأمر الإنتاج ${data.productionOrderNumber}`,
+        data.conversionFactor && data.conversionFactor !== 1
+          ? `(${data.actualQuantity} ${data.uom} = ${baseQtyToIssue} ${data.baseUOM || ''})`
+          : undefined
+      ].filter(Boolean).join(' ')
     };
 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setMaterialIssues(prev => [newIssue, ...prev]);
 
-    logAudit('MATERIAL_ISSUE', 'صرف خامات إنتاج', nextNum, `صرف ${data.actualQuantity} ${data.uom} من ${data.rawMaterialName} لأمر ${data.productionOrderNumber}`);
+    logAudit('MATERIAL_ISSUE', 'صرف خامات إنتاج', nextNum, `صرف ${data.actualQuantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToIssue} ${data.baseUOM || ''}) ` : ''}من ${data.rawMaterialName} لأمر ${data.productionOrderNumber}`);
 
     return newIssue;
   };
@@ -967,12 +1010,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let newFGQty = 0;
       let newFGVal = 0;
       let newFGMAC = 0;
+      const fgBaseQty = receipt.baseQuantity != null ? receipt.baseQuantity : (receipt.finishedQuantity * (receipt.conversionFactor || 1));
 
       setProducts(prev => prev.map(prod => {
         if (prod.id === order.productId) {
           const oldQty = prod.currentQty || 0;
           const oldVal = prod.totalValue || 0;
-          newFGQty = oldQty + receipt.finishedQuantity;
+          newFGQty = oldQty + fgBaseQty;
           newFGVal = oldVal + receipt.totalMaterialCostEGP;
           newFGMAC = newFGQty > 0 ? newFGVal / newFGQty : 0;
           return {
@@ -999,7 +1043,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         transactionType: TransactionType.FINISHED_GOODS_RECEIPT,
         documentNumber: receipt.receiptNumber,
         reference: order.orderNumber,
-        qtyIn: receipt.finishedQuantity,
+        qtyIn: fgBaseQty,
         qtyOut: 0,
         balanceQty: newFGQty,
         unitCostEGP: receipt.finishedGoodsUnitCostEGP,
@@ -1007,7 +1051,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         runningInventoryValueEGP: newFGVal,
         movingAverageCostEGP: newFGMAC,
         createdBy: currentUser?.fullName || 'Quality Officer',
-        notes: `استلام منتج تام بعد اعتماد الجودة (${reason || 'مطابق للمواصفات القياسية'})`
+        notes: `استلام منتج تام بعد اعتماد الجودة (${reason || 'مطابق للمواصفات القياسية'})${receipt.conversionFactor && receipt.conversionFactor !== 1 ? ` [${receipt.finishedQuantity} ${receipt.uom} = ${fgBaseQty} ${receipt.baseUOM || ''}]` : ''}`
       };
 
       // Scrap Warehouse Ledger Entry (0 EGP Value)
@@ -1114,10 +1158,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let newQty = 0;
     let newTotalVal = 0;
     const mac = data.movingAverageCostEGP;
+    const baseQtyToDeliver = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
 
     setProducts(prev => prev.map(prod => {
       if (prod.id === data.productId) {
-        newQty = Math.max(0, (prod.currentQty || 0) - data.quantity);
+        newQty = Math.max(0, (prod.currentQty || 0) - baseQtyToDeliver);
         newTotalVal = newQty * mac;
         return {
           ...prod,
@@ -1142,20 +1187,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       documentNumber: nextNum,
       reference: `${data.customerName} - ${data.reference || ''}`,
       qtyIn: 0,
-      qtyOut: data.quantity,
+      qtyOut: baseQtyToDeliver,
       balanceQty: newQty,
       unitCostEGP: mac,
       transactionValueEGP: data.totalDeliveryValueEGP,
       runningInventoryValueEGP: newTotalVal,
       movingAverageCostEGP: mac,
       createdBy: currentUser?.fullName || 'System User',
-      notes: data.notes
+      notes: [
+        data.notes,
+        data.conversionFactor && data.conversionFactor !== 1
+          ? `صرف بـ: ${data.quantity} ${data.uom} (= ${baseQtyToDeliver} ${data.baseUOM || ''})`
+          : undefined
+      ].filter(Boolean).join(' | ')
     };
 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setCustomerDeliveries(prev => [newDelivery, ...prev]);
 
-    logAudit('CUSTOMER_DELIVERY', 'تسليم عميل', nextNum, `صرف ${data.quantity} ${data.uom} للعميل ${data.customerName} بتكلفة مبيعات ${data.totalDeliveryValueEGP.toLocaleString('en-US')} ج.م`);
+    logAudit('CUSTOMER_DELIVERY', 'تسليم عميل', nextNum, `صرف ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToDeliver} ${data.baseUOM || ''}) ` : ''}للعميل ${data.customerName} بتكلفة مبيعات ${data.totalDeliveryValueEGP.toLocaleString('en-US')} ج.م`);
 
     return newDelivery;
   };

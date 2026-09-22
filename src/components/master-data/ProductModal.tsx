@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, Save, Bookmark, Plus, CheckCircle2, Copy } from 'lucide-react';
+import { X, Package, Save, Bookmark, Plus, CheckCircle2, Copy, Scale, ArrowRightLeft } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ItemType, VALUATION_METHOD_LABELS, ItemCategory } from '../../types';
 import { ItemCategoryModal } from './ItemCategoryModal';
 import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
+import { getPrimaryUOMs } from '../../utils/uomHelper';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -342,34 +343,56 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </select>
             </div>
 
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">
-                {isAr ? 'وحدة القياس الأساسية' : 'Default UOM'}
-              </label>
-              <select
-                value={formData.defaultUOM || 'KG'}
-                onChange={e => setFormData(prev => ({ ...prev, defaultUOM: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono"
-              >
-                {uoms.map(u => (
-                  <option key={u.id} value={u.code}>{u.code} ({u.nameAr})</option>
-                ))}
-              </select>
-            </div>
+            <div className="col-span-1 sm:col-span-2 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+              <div>
+                <label className="block text-slate-800 font-bold mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Scale className="w-4 h-4 text-emerald-600" />
+                    <span>{isAr ? 'وحدة القياس الرئيسية للمنتج (Primary Base UOM) *' : 'Product Primary Base UOM *'}</span>
+                  </span>
+                  <span className="text-[10px] font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {isAr ? 'أساس رصيد وتكلفة المخزون' : 'Stock & Cost Basis'}
+                  </span>
+                </label>
+                <select
+                  value={formData.defaultUOM || 'KG'}
+                  onChange={e => setFormData(prev => ({ ...prev, defaultUOM: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono font-bold text-slate-800"
+                >
+                  {getPrimaryUOMs(uoms).map(u => (
+                    <option key={u.id} value={u.code}>
+                      {u.code} - {u.nameAr} ({u.nameEn})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">
-                {isAr ? 'وحدة البيع / القياس البديلة' : 'Alternative UOM'}
-              </label>
-              <select
-                value={formData.alternativeUOM || 'MTR'}
-                onChange={e => setFormData(prev => ({ ...prev, alternativeUOM: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-mono"
-              >
-                {uoms.map(u => (
-                  <option key={u.id} value={u.code}>{u.code} ({u.nameAr})</option>
-                ))}
-              </select>
+              {/* Show linked derived units dynamically */}
+              {(() => {
+                const currentPrimaryCode = formData.defaultUOM || 'KG';
+                const relatedUnits = uoms.filter(u => u.baseUOM === currentPrimaryCode && u.code !== currentPrimaryCode);
+                return (
+                  <div className="text-[11px] bg-white p-2.5 rounded-lg border border-slate-200/80 space-y-1">
+                    <div className="flex items-center gap-1 font-semibold text-slate-700">
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{isAr ? 'الوحدات الفرعية التابعة المتاحة تلقائياً في استلام وتسليم المنتج:' : 'Derived Units for Receipts & Deliveries:'}</span>
+                    </div>
+                    {relatedUnits.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {relatedUnits.map(ru => (
+                          <span key={ru.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-mono text-[10px] font-medium">
+                            <strong>{ru.code}</strong> ({ru.nameAr}) = {ru.conversionFactor} {currentPrimaryCode}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">
+                        {isAr ? 'لا توجد وحدات فرعية مرتبطة بهذه الوحدة حالياً. يمكنك إضافتها من شاشة وحدات القياس.' : 'No linked sub-units yet.'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

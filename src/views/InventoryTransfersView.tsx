@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowRightLeft,
   Plus,
@@ -11,7 +11,8 @@ import {
   Camera,
   WifiOff,
   RefreshCw,
-  Zap
+  Zap,
+  Scale
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -23,6 +24,7 @@ import { BarcodeTransferScannerModal } from '../components/inventory/BarcodeTran
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryTransfer } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
+import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 
 export const InventoryTransfersView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -35,6 +37,7 @@ export const InventoryTransfersView: React.FC = () => {
     locations,
     rawMaterials,
     products,
+    uoms,
     currentUser,
     odooConfig
   } = useApp();
@@ -53,12 +56,27 @@ export const InventoryTransfersView: React.FC = () => {
   const [toLocId, setToLocId] = useState(locations[0]?.id || 'loc-stage-1');
   const [selectedItemId, setSelectedItemId] = useState(rawMaterials[0]?.id || '');
   const [quantity, setQuantity] = useState(1000);
+  const [selectedUOM, setSelectedUOM] = useState('');
   const [reference, setReference] = useState('أمر تشغيل خط البثق');
   const [notes, setNotes] = useState('');
 
   const selectedItem = rawMaterials.find(m => m.id === selectedItemId) || products.find(p => p.id === selectedItemId);
+  const itemBaseUOM = selectedItem?.defaultUOM || 'KG';
+
+  // Available UOMs for this item
+  const availableUOMs = getAvailableUOMsForItem(itemBaseUOM, uoms);
+
+  useEffect(() => {
+    if (selectedItem) {
+      setSelectedUOM(selectedItem.defaultUOM || 'KG');
+    }
+  }, [selectedItemId]);
+
+  const activeTransactionUOM = selectedUOM || itemBaseUOM;
+  const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
+  const baseQuantity = quantity * conversionFactor;
   const unitCostEGP = selectedItem?.movingAverageCost || 110;
-  const totalValueEGP = quantity * unitCostEGP;
+  const totalValueEGP = baseQuantity * unitCostEGP;
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +92,10 @@ export const InventoryTransfersView: React.FC = () => {
       itemCode: selectedItem.code,
       itemName: selectedItem.nameAr,
       quantity,
-      uom: selectedItem.defaultUOM || 'KG',
+      uom: activeTransactionUOM,
+      conversionFactor,
+      baseQuantity,
+      baseUOM: itemBaseUOM,
       unitCostEGP,
       totalValueEGP,
       reference,
@@ -179,9 +200,16 @@ export const InventoryTransfersView: React.FC = () => {
       headerAr: 'الكمية المحولة',
       headerEn: 'Quantity',
       render: t => (
-        <span className="font-mono font-bold text-slate-900">
-          {formatNumber(t.quantity, language)} {t.uom}
-        </span>
+        <div>
+          <span className="font-mono font-bold text-slate-900">
+            {formatNumber(t.quantity, language)} {t.uom}
+          </span>
+          {t.conversionFactor && t.conversionFactor !== 1 && (
+            <div className="text-[10px] text-slate-500 font-mono">
+              = {formatNumber(t.baseQuantity != null ? t.baseQuantity : (t.quantity * t.conversionFactor), language)} {t.baseUOM || 'KG'}
+            </div>
+          )}
+        </div>
       ),
       exportValue: t => t.quantity
     },
@@ -448,19 +476,37 @@ export const InventoryTransfersView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Quantity */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Quantity & UOM */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? 'وحدة القياس للحركة *' : 'Transfer UOM *'}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">({availableUOMs.length} {isAr ? 'متاحة' : 'avail'})</span>
+                  </label>
+                  <select
+                    value={activeTransactionUOM}
+                    onChange={e => setSelectedUOM(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
+                  >
+                    {availableUOMs.map(u => (
+                      <option key={u.id} value={u.code}>
+                        {u.code} - {u.nameAr} {u.conversionFactor && u.conversionFactor !== 1 ? `(×${u.conversionFactor})` : `(${isAr ? 'أساسية' : 'Base'})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? `الكمية المحولة (${selectedItem?.defaultUOM || 'KG'}) *` : 'Transfer Qty *'}
+                    {isAr ? `الكمية المحولة (${activeTransactionUOM}) *` : `Transfer Qty (${activeTransactionUOM}) *`}
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0.0001"
                     step="any"
                     value={quantity}
                     onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold"
+                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-sky-700 focus:ring-2 focus:ring-sky-500"
                     required
                   />
                 </div>
@@ -477,6 +523,19 @@ export const InventoryTransfersView: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Conversion Preview Badge */}
+              {conversionFactor !== 1 && (
+                <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 text-blue-900 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{isAr ? 'معادلة التحويل للوحدة الأساسية للمخزون:' : 'Base Conversion:'}</span>
+                  </span>
+                  <span className="font-mono font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-blue-200">
+                    {formatUOMTransactionLabel(quantity, activeTransactionUOM, itemBaseUOM, conversionFactor, language)}
+                  </span>
+                </div>
+              )}
 
               {/* Cost Preview */}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs font-mono">

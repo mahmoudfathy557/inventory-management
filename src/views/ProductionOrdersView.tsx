@@ -19,7 +19,9 @@ import {
   Eye,
   GitCommit,
   BarChart3,
-  HelpCircle
+  HelpCircle,
+  ArrowRightLeft,
+  Scale
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
@@ -31,6 +33,7 @@ import { ProductionCostImpactReport } from '../components/reports/ProductionCost
 import { ProductionOrdersSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { formatCurrency, formatNumber } from '../utils/formatters';
+import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import {
   ProductionOrder,
   ProductionOrderStatus,
@@ -59,6 +62,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
     rawMaterials,
     boms,
     warehouses,
+    uoms,
     currentUser
   } = useApp();
   const isAr = language === 'ar';
@@ -90,9 +94,11 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
   // Issue modal state
   const [issueQty, setIssueQty] = useState(1000);
+  const [issueUOM, setIssueUOM] = useState('');
 
   // Produce modal state
   const [finishedQty, setFinishedQty] = useState(900);
+  const [produceUOM, setProduceUOM] = useState('');
   const [scrapQty, setScrapQty] = useState(100);
   const [laborCost, setLaborCost] = useState(0);
   const [overheadCost, setOverheadCost] = useState(0);
@@ -142,29 +148,48 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
     setIsCreateOpen(false);
   };
 
+  // Active target raw material for issue modal
+  const firstMatLine = selectedOrder?.materials?.[0];
+  const activeRawMat = rawMaterials.find(m => m.id === firstMatLine?.rawMaterialId) || rawMaterials[0] || {
+    id: 'rm-001',
+    code: 'RM-PP-01',
+    nameAr: 'بولي بروبيلين عالي الكثافة (PP)',
+    defaultUOM: 'KG',
+    movingAverageCost: 110
+  };
+  const rawMatBaseUOM = activeRawMat.defaultUOM || 'KG';
+  const availableIssueUOMs = getAvailableUOMsForItem(rawMatBaseUOM, uoms);
+  const activeIssueUOM = issueUOM || rawMatBaseUOM;
+  const issueFactor = getConversionFactorToBase(activeIssueUOM, rawMatBaseUOM, uoms);
+  const baseIssueQty = issueQty * issueFactor;
+
+  // Active product output for produce modal
+  const prodBaseUOM = selectedOrder?.uom || 'KG';
+  const availableProduceUOMs = getAvailableUOMsForItem(prodBaseUOM, uoms);
+  const activeProduceUOM = produceUOM || prodBaseUOM;
+  const produceFactor = getConversionFactorToBase(activeProduceUOM, prodBaseUOM, uoms);
+  const baseFinishedQty = finishedQty * produceFactor;
+  const baseScrapQty = scrapQty * produceFactor;
+
   const handleIssueSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) return;
-
-    const rawMat = rawMaterials[0] || {
-      id: 'rm-001',
-      code: 'RM-PP-01',
-      nameAr: 'بولي بروبيلين عالي الكثافة (PP)',
-      movingAverageCost: 110
-    };
 
     issueMaterialToProduction({
       productionOrderId: selectedOrder.id,
       productionOrderNumber: selectedOrder.orderNumber,
       date: new Date().toISOString().split('T')[0],
-      rawMaterialId: rawMat.id,
-      rawMaterialCode: rawMat.code,
-      rawMaterialName: rawMat.nameAr,
+      rawMaterialId: activeRawMat.id,
+      rawMaterialCode: activeRawMat.code,
+      rawMaterialName: activeRawMat.nameAr,
       plannedQuantity: issueQty,
       actualQuantity: issueQty,
-      uom: 'KG',
-      movingAverageCostEGP: rawMat.movingAverageCost || 110,
-      totalActualCostEGP: issueQty * (rawMat.movingAverageCost || 110),
+      uom: activeIssueUOM,
+      conversionFactor: issueFactor,
+      baseQuantity: baseIssueQty,
+      baseUOM: rawMatBaseUOM,
+      movingAverageCostEGP: activeRawMat.movingAverageCost || 110,
+      totalActualCostEGP: baseIssueQty * (activeRawMat.movingAverageCost || 110),
       warehouseId: selectedOrder.wipWarehouseId || 'wh-raw',
       createdBy: currentUser?.fullName || 'Production Engineer'
     });
@@ -178,7 +203,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
     if (!selectedOrder) return;
 
     const totalCost = (selectedOrder.actualMaterialCostEGP || 110000) + laborCost + overheadCost;
-    const unitCost = finishedQty > 0 ? totalCost / finishedQty : 0;
+    const unitCost = baseFinishedQty > 0 ? totalCost / baseFinishedQty : 0;
 
     recordProductionReceipt({
       productionOrderId: selectedOrder.id,
@@ -189,7 +214,10 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       productName: selectedOrder.productName,
       finishedQuantity: finishedQty,
       scrapQuantity: scrapQty,
-      uom: selectedOrder.uom,
+      uom: activeProduceUOM,
+      conversionFactor: produceFactor,
+      baseQuantity: baseFinishedQty,
+      baseUOM: prodBaseUOM,
       finishedGoodsWarehouseId: selectedOrder.finishedGoodsWarehouseId || 'wh-fg',
       scrapWarehouseId: 'wh-scrap',
       totalMaterialCostEGP: totalCost,
@@ -787,27 +815,63 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
             <form onSubmit={handleIssueSubmit} className="p-6 space-y-4 text-xs">
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 space-y-1">
-                <div className="font-bold">{isAr ? 'المادة الخام المستهدفة:' : 'Target Raw Material:'}</div>
-                <div>بولي بروبيلين عالي الكثافة (PP) - متوسط التكلفة: 110.00 ج.م/كجم</div>
+                <div className="font-bold flex items-center justify-between">
+                  <span>{isAr ? 'المادة الخام المستهدفة:' : 'Target Raw Material:'}</span>
+                  <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-amber-200 font-bold">
+                    {activeRawMat.code}
+                  </span>
+                </div>
+                <div>{activeRawMat.nameAr} - متوسط التكلفة: {formatCurrency(activeRawMat.movingAverageCost || 110, language)} / {rawMatBaseUOM}</div>
                 <div className="text-[11px] text-amber-700 font-mono">
-                  {isAr ? 'القيمة المقدرة للصرف:' : 'Total Value:'} {formatCurrency(issueQty * 110, language)}
+                  {isAr ? 'القيمة المقدرة للصرف:' : 'Total Value:'} {formatCurrency(baseIssueQty * (activeRawMat.movingAverageCost || 110), language)}
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {isAr ? 'الكمية الفعلية المصروفة (كجم) *' : 'Actual Issued Qty (KG) *'}
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  step="any"
-                  value={issueQty}
-                  onChange={e => setIssueQty(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2.5 rounded-lg border border-slate-200 font-mono font-bold text-base"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'وحدة القياس لصرف الخام *' : 'Issue UOM *'}
+                  </label>
+                  <select
+                    value={activeIssueUOM}
+                    onChange={e => setIssueUOM(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-amber-500"
+                  >
+                    {availableIssueUOMs.map(u => (
+                      <option key={u.id} value={u.code}>
+                        {u.code} - {u.nameAr} {u.conversionFactor && u.conversionFactor !== 1 ? `(×${u.conversionFactor})` : `(${isAr ? 'أساسية' : 'Base'})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? `الكمية الفعلية المصروفة (${activeIssueUOM}) *` : `Actual Issued Qty (${activeIssueUOM}) *`}
+                  </label>
+                  <input
+                    type="number"
+                    min="0.0001"
+                    step="any"
+                    value={issueQty}
+                    onChange={e => setIssueQty(parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 font-mono font-bold text-base text-amber-700 focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
               </div>
+
+              {issueFactor !== 1 && (
+                <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 text-blue-900 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{isAr ? 'معادلة التحويل للوحدة الأساسية:' : 'Base Conversion:'}</span>
+                  </span>
+                  <span className="font-mono font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-blue-200">
+                    {formatUOMTransactionLabel(issueQty, activeIssueUOM, rawMatBaseUOM, issueFactor, language)}
+                  </span>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                 <button
@@ -849,25 +913,42 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
             </div>
 
             <form onSubmit={handleProduceSubmit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'الكمية التامة المنتجة (كجم) *' : 'Finished Goods Qty *'}
+                    {isAr ? 'وحدة الاستلام *' : 'Receipt UOM *'}
+                  </label>
+                  <select
+                    value={activeProduceUOM}
+                    onChange={e => setProduceUOM(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {availableProduceUOMs.map(u => (
+                      <option key={u.id} value={u.code}>
+                        {u.code} - {u.nameAr} {u.conversionFactor && u.conversionFactor !== 1 ? `(×${u.conversionFactor})` : `(${isAr ? 'أساسية' : 'Base'})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? `الكمية التامة (${activeProduceUOM}) *` : `Finished Qty (${activeProduceUOM}) *`}
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0.0001"
                     step="any"
                     value={finishedQty}
                     onChange={e => setFinishedQty(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-700"
+                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'كمية الهالك (كجم) *' : 'Scrap Qty (0 EGP) *'}
+                    {isAr ? `كمية الهالك (${activeProduceUOM}) *` : `Scrap Qty (${activeProduceUOM}) *`}
                   </label>
                   <input
                     type="number"
@@ -880,6 +961,18 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                   />
                 </div>
               </div>
+
+              {produceFactor !== 1 && (
+                <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 text-blue-900 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{isAr ? 'معادلة التحويل للوحدة الأساسية للمنتج:' : 'Base Conversion:'}</span>
+                  </span>
+                  <span className="font-mono font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-blue-200">
+                    {formatUOMTransactionLabel(finishedQty, activeProduceUOM, prodBaseUOM, produceFactor, language)}
+                  </span>
+                </div>
+              )}
 
               {/* Costing Engine Preview (Section 22 Rule) */}
               {(() => {

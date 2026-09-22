@@ -193,12 +193,15 @@ export interface ProductionLocation {
   notes?: string;
 }
 
+export type UOMType = 'PRIMARY' | 'SECONDARY';
+
 export interface UOM {
   id: string;
   code: string;
   nameAr: string;
   nameEn: string;
-  baseUOM?: string;
+  uomType?: UOMType; // PRIMARY (رئيسية) or SECONDARY (تابعة)
+  baseUOM?: string; // Parent primary UOM code (e.g. 'KG')
   conversionFactor: number; // e.g. 1 TON = 1000 KG
   active: boolean;
 }
@@ -365,6 +368,9 @@ export interface InventoryReceipt {
   locationId?: string;
   quantity: number;
   uom: string;
+  baseQuantity?: number;
+  baseUOM?: string;
+  conversionFactor?: number;
   unitPrice: number; // In transaction currency
   unitPriceEGP: number; // Calculated
   totalValueEGP: number;
@@ -409,6 +415,9 @@ export interface InventoryIssue {
   itemName: string;
   quantity: number;
   uom: string;
+  baseQuantity?: number;
+  baseUOM?: string;
+  conversionFactor?: number;
   movingAverageCostEGP: number;
   totalIssueValueEGP: number;
   reason: string;
@@ -432,6 +441,9 @@ export interface InventoryTransfer {
   itemName: string;
   quantity: number;
   uom: string;
+  baseQuantity?: number;
+  baseUOM?: string;
+  conversionFactor?: number;
   unitCostEGP: number;
   totalValueEGP: number;
   reference?: string;
@@ -520,6 +532,9 @@ export interface MaterialIssue {
   plannedQuantity: number;
   actualQuantity: number;
   uom: string;
+  baseQuantity?: number;
+  baseUOM?: string;
+  conversionFactor?: number;
   movingAverageCostEGP: number;
   totalActualCostEGP: number;
   warehouseId: string;
@@ -541,6 +556,9 @@ export interface ProductionReceipt {
   finishedQuantity: number;
   scrapQuantity: number;
   uom: string;
+  baseQuantity?: number;
+  baseUOM?: string;
+  conversionFactor?: number;
   finishedGoodsWarehouseId: string;
   scrapWarehouseId: string;
   totalMaterialCostEGP: number;
@@ -567,6 +585,9 @@ export interface CustomerDelivery {
   productName: string;
   quantity: number;
   uom: string;
+  baseQuantity?: number;
+  baseUOM?: string;
+  conversionFactor?: number;
   movingAverageCostEGP: number;
   totalDeliveryValueEGP: number;
   sellingPriceEGP?: number;
