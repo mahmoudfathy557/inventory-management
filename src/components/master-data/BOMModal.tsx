@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { X, Boxes, Plus, Trash2, Save } from 'lucide-react';
+import { X, Boxes, Plus, Trash2, Save, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BOM, BOMLine } from '../../types';
+import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
 
 interface BOMModalProps {
   isOpen: boolean;
   bom?: BOM | null;
+  isDuplicate?: boolean;
   onClose: () => void;
 }
 
-export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
-  const { language, products, rawMaterials, locations, saveBOM, currentUser } = useApp();
+export const BOMModal: React.FC<BOMModalProps> = ({
+  isOpen,
+  bom,
+  isDuplicate = false,
+  onClose
+}) => {
+  const { language, boms, products, rawMaterials, locations, saveBOM, currentUser } = useApp();
   const isAr = language === 'ar';
 
   const [code, setCode] = useState('');
@@ -23,13 +30,24 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
 
   useEffect(() => {
     if (bom) {
-      setCode(bom.code);
-      setNameAr(bom.nameAr);
-      setNameEn(bom.nameEn);
-      setProductId(bom.productId);
-      setVersion(bom.version);
-      setStatus(bom.status);
-      setLines(bom.lines.map(l => ({ ...l })));
+      if (isDuplicate) {
+        const existingCodes = boms.map(b => b.code);
+        setCode(generateNextSequentialCode(bom.code, existingCodes));
+        setNameAr(generateDuplicateName(bom.nameAr, true));
+        setNameEn(generateDuplicateName(bom.nameEn || '', false));
+        setProductId(bom.productId);
+        setVersion(bom.version);
+        setStatus(bom.status);
+        setLines(bom.lines.map(l => ({ ...l, id: `line-${Date.now()}-${Math.random()}` })));
+      } else {
+        setCode(bom.code);
+        setNameAr(bom.nameAr);
+        setNameEn(bom.nameEn);
+        setProductId(bom.productId);
+        setVersion(bom.version);
+        setStatus(bom.status);
+        setLines(bom.lines.map(l => ({ ...l })));
+      }
     } else {
       const defaultProd = products[0];
       setCode(`BOM-PIPE-${Math.floor(100 + Math.random() * 900)}`);
@@ -59,7 +77,7 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
         setLines([]);
       }
     }
-  }, [bom, isOpen, products, rawMaterials, locations]);
+  }, [bom, isOpen, isDuplicate, boms, products, rawMaterials, locations]);
 
   if (!isOpen) return null;
 
@@ -130,7 +148,7 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
     if (!prod) return;
 
     const finalBom: BOM = {
-      id: bom?.id || `bom-${Date.now()}`,
+      id: (isDuplicate ? null : bom?.id) || `bom-${Date.now()}`,
       code: code.trim(),
       productId: prod.id,
       productCode: prod.code,
@@ -138,7 +156,7 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
       nameAr: nameAr.trim(),
       nameEn: nameEn.trim() || nameAr.trim(),
       version: version.trim() || '1.0',
-      effectiveFrom: bom?.effectiveFrom || new Date().toISOString().split('T')[0],
+      effectiveFrom: (!isDuplicate && bom?.effectiveFrom) || new Date().toISOString().split('T')[0],
       status,
       approvalStatus: 'APPROVED',
       approvedBy: currentUser?.fullName || 'System Admin',
@@ -158,17 +176,32 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
       <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Boxes className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isDuplicate
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-purple-50 text-purple-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <Boxes className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {bom
-                  ? isAr ? 'تعديل قائمة المواد (BOM)' : 'Edit Bill of Materials'
-                  : isAr ? 'إنشاء قائمة مواد صناعية جديدة (BOM)' : 'Create New Bill of Materials'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {isDuplicate
+                    ? isAr ? 'نسخ وتكرار قائمة مواد BOM جديدة' : 'Duplicate Bill of Materials'
+                    : bom
+                    ? isAr ? 'تعديل قائمة المواد (BOM)' : 'Edit Bill of Materials'
+                    : isAr ? 'إنشاء قائمة مواد صناعية جديدة (BOM)' : 'Create New Bill of Materials'}
+                </h3>
+                {isDuplicate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {isAr ? 'نسخ سريع' : 'Quick Duplicate'}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-500">
-                {isAr ? 'تحديد نسب استهلاك الخامات لكل وحدة منتج تام معتمدة لأمر الإنتاج' : 'Specify raw material consumption rates per finished goods unit'}
+                {isDuplicate
+                  ? isAr ? 'تم نسخ جميع نسب الخامات والمراحل وتوليد كود تسلسلي جديد. يمكنك تعديل المنتج أو النسب والحفظ مباشرة.' : 'Cloned with next sequential code. Edit product or ratios and save.'
+                  : isAr ? 'تحديد نسب استهلاك الخامات لكل وحدة منتج تام معتمدة لأمر الإنتاج' : 'Specify raw material consumption rates per finished goods unit'}
               </p>
             </div>
           </div>
@@ -342,10 +375,18 @@ export const BOMModal: React.FC<BOMModalProps> = ({ isOpen, bom, onClose }) => {
             <button
               type="submit"
               disabled={lines.length === 0}
-              className="px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white disabled:opacity-50 rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+                isDuplicate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-purple-600 hover:bg-purple-700'
+              }`}
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isAr ? 'اعتماد وحفظ قائمة BOM' : 'Save BOM'}</span>
+              {isDuplicate ? <Copy className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>
+                {isDuplicate
+                  ? isAr ? 'اعتماد وحفظ القائمة المنسوخة (BOM جديدة)' : 'Save Cloned BOM'
+                  : isAr ? 'اعتماد وحفظ قائمة BOM' : 'Save BOM'}
+              </span>
             </button>
           </div>
         </form>

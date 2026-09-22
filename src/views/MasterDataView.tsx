@@ -18,7 +18,8 @@ import {
   AlertCircle,
   Calendar,
   Bookmark,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Copy
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -116,31 +117,40 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
   // Modals state
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory | null>(null);
+  const [isCategoryDuplicate, setIsCategoryDuplicate] = useState(false);
 
   const [isRawModalOpen, setIsRawModalOpen] = useState(false);
   const [selectedRaw, setSelectedRaw] = useState<RawMaterial | null>(null);
+  const [isRawDuplicate, setIsRawDuplicate] = useState(false);
 
   const [isProdModalOpen, setIsProdModalOpen] = useState(false);
   const [selectedProd, setSelectedProd] = useState<Product | null>(null);
+  const [isProdDuplicate, setIsProdDuplicate] = useState(false);
 
   const [isBOMModalOpen, setIsBOMModalOpen] = useState(false);
   const [selectedBOM, setSelectedBOM] = useState<BOM | null>(null);
+  const [isBOMDuplicate, setIsBOMDuplicate] = useState(false);
 
   const [isWhModalOpen, setIsWhModalOpen] = useState(false);
   const [selectedWh, setSelectedWh] = useState<Warehouse | null>(null);
+  const [isWhDuplicate, setIsWhDuplicate] = useState(false);
 
   const [isLocModalOpen, setIsLocModalOpen] = useState(false);
   const [selectedLoc, setSelectedLoc] = useState<ProductionLocation | null>(null);
+  const [isLocDuplicate, setIsLocDuplicate] = useState(false);
 
   const [isMachineModalOpen, setIsMachineModalOpen] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
+  const [isMachineDuplicate, setIsMachineDuplicate] = useState(false);
 
   const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
   const [partnerModalType, setPartnerModalType] = useState<'CUSTOMER' | 'SUPPLIER'>('CUSTOMER');
   const [selectedPartner, setSelectedPartner] = useState<Customer | Supplier | null>(null);
+  const [isPartnerDuplicate, setIsPartnerDuplicate] = useState(false);
 
   const [isUOMModalOpen, setIsUOMModalOpen] = useState(false);
   const [selectedUOM, setSelectedUOM] = useState<UOM | null>(null);
+  const [isUOMDuplicate, setIsUOMDuplicate] = useState(false);
 
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | null>(null);
@@ -196,7 +206,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </button>
           {activeSubTab === 'categories' && (
             <button
-              onClick={() => { setSelectedCategory(null); setIsCategoryModalOpen(true); }}
+              onClick={() => { setSelectedCategory(null); setIsCategoryDuplicate(false); setIsCategoryModalOpen(true); }}
               className="px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -206,7 +216,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
           {activeSubTab === 'raw' && (
             <button
-              onClick={() => { setSelectedRaw(null); setIsRawModalOpen(true); }}
+              onClick={() => { setSelectedRaw(null); setIsRawDuplicate(false); setIsRawModalOpen(true); }}
               className="px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -216,7 +226,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
           {activeSubTab === 'products' && (
             <button
-              onClick={() => { setSelectedProd(null); setIsProdModalOpen(true); }}
+              onClick={() => { setSelectedProd(null); setIsProdDuplicate(false); setIsProdModalOpen(true); }}
               className="px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -226,7 +236,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
           {activeSubTab === 'boms' && (
             <button
-              onClick={() => { setSelectedBOM(null); setIsBOMModalOpen(true); }}
+              onClick={() => { setSelectedBOM(null); setIsBOMDuplicate(false); setIsBOMModalOpen(true); }}
               className="px-3.5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -237,14 +247,14 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           {activeSubTab === 'warehouses' && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { setSelectedWh(null); setIsWhModalOpen(true); }}
+                onClick={() => { setSelectedWh(null); setIsWhDuplicate(false); setIsWhModalOpen(true); }}
                 className="px-3 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{isAr ? 'مستودع جديد' : 'New Warehouse'}</span>
               </button>
               <button
-                onClick={() => { setSelectedLoc(null); setIsLocModalOpen(true); }}
+                onClick={() => { setSelectedLoc(null); setIsLocDuplicate(false); setIsLocModalOpen(true); }}
                 className="px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -255,7 +265,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
           {activeSubTab === 'machines' && (
             <button
-              onClick={() => { setSelectedMachine(null); setIsMachineModalOpen(true); }}
+              onClick={() => { setSelectedMachine(null); setIsMachineDuplicate(false); setIsMachineModalOpen(true); }}
               className="px-3.5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -266,14 +276,14 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           {activeSubTab === 'partners' && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { setPartnerModalType('CUSTOMER'); setSelectedPartner(null); setIsPartnerModalOpen(true); }}
+                onClick={() => { setPartnerModalType('CUSTOMER'); setSelectedPartner(null); setIsPartnerDuplicate(false); setIsPartnerModalOpen(true); }}
                 className="px-3 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{isAr ? 'إضافة عميل' : 'Add Customer'}</span>
               </button>
               <button
-                onClick={() => { setPartnerModalType('SUPPLIER'); setSelectedPartner(null); setIsPartnerModalOpen(true); }}
+                onClick={() => { setPartnerModalType('SUPPLIER'); setSelectedPartner(null); setIsPartnerDuplicate(false); setIsPartnerModalOpen(true); }}
                 className="px-3 py-2 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -284,7 +294,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
           {activeSubTab === 'uoms' && (
             <button
-              onClick={() => { setSelectedUOM(null); setIsUOMModalOpen(true); }}
+              onClick={() => { setSelectedUOM(null); setIsUOMDuplicate(false); setIsUOMModalOpen(true); }}
               className="px-3.5 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -580,7 +590,14 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => { setSelectedCategory(cat); setIsCategoryModalOpen(true); }}
+                            onClick={() => { setSelectedCategory(cat); setIsCategoryDuplicate(true); setIsCategoryModalOpen(true); }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                            title={isAr ? 'نسخ وتكرار سريع' : 'Duplicate Category'}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => { setSelectedCategory(cat); setIsCategoryDuplicate(false); setIsCategoryModalOpen(true); }}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
                             title={isAr ? 'تعديل المجموعة' : 'Edit'}
                           >
@@ -689,8 +706,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                     </span>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => { setSelectedRaw(m); setIsRawModalOpen(true); }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                        onClick={() => { setSelectedRaw(m); setIsRawDuplicate(true); setIsRawModalOpen(true); }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                        title={isAr ? 'نسخ وتكرار سريع' : 'Duplicate Raw Material'}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setSelectedRaw(m); setIsRawDuplicate(false); setIsRawModalOpen(true); }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
                         title={isAr ? 'تعديل الصنف' : 'Edit'}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -842,8 +866,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => { setSelectedProd(p); setIsProdModalOpen(true); }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                        onClick={() => { setSelectedProd(p); setIsProdDuplicate(true); setIsProdModalOpen(true); }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                        title={isAr ? 'نسخ وتكرار سريع' : 'Duplicate Product'}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setSelectedProd(p); setIsProdDuplicate(false); setIsProdModalOpen(true); }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
                         title={isAr ? 'تعديل المنتج' : 'Edit'}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -939,8 +970,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => { setSelectedBOM(b); setIsBOMModalOpen(true); }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition"
+                      onClick={() => { setSelectedBOM(b); setIsBOMDuplicate(true); setIsBOMModalOpen(true); }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                      title={isAr ? 'نسخ وتكرار قائمة المواد' : 'Duplicate BOM'}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => { setSelectedBOM(b); setIsBOMDuplicate(false); setIsBOMModalOpen(true); }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition cursor-pointer"
                       title={isAr ? 'تعديل قائمة المواد' : 'Edit BOM'}
                     >
                       <Edit2 className="w-4 h-4" />
@@ -1045,8 +1083,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
                       <div className="flex items-center justify-end gap-1 pt-2 border-t border-slate-100">
                         <button
-                          onClick={() => { setSelectedWh(w); setIsWhModalOpen(true); }}
-                          className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                          onClick={() => { setSelectedWh(w); setIsWhDuplicate(true); setIsWhModalOpen(true); }}
+                          className="p-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                          title={isAr ? 'نسخ وتكرار المستودع' : 'Duplicate Warehouse'}
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedWh(w); setIsWhDuplicate(false); setIsWhModalOpen(true); }}
+                          className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
                           title={isAr ? 'تعديل' : 'Edit'}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -1102,8 +1147,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
                       <div className="flex items-center justify-end gap-1 pt-2 border-t border-slate-100">
                         <button
-                          onClick={() => { setSelectedLoc(l); setIsLocModalOpen(true); }}
-                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                          onClick={() => { setSelectedLoc(l); setIsLocDuplicate(true); setIsLocModalOpen(true); }}
+                          className="p-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                          title={isAr ? 'نسخ وتكرار موقع الإنتاج' : 'Duplicate Location'}
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedLoc(l); setIsLocDuplicate(false); setIsLocModalOpen(true); }}
+                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
                           title={isAr ? 'تعديل' : 'Edit'}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -1148,8 +1200,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                   </span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => { setSelectedMachine(m); setIsMachineModalOpen(true); }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition"
+                      onClick={() => { setSelectedMachine(m); setIsMachineDuplicate(true); setIsMachineModalOpen(true); }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                      title={isAr ? 'نسخ وتكرار الماكينة' : 'Duplicate Machine'}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => { setSelectedMachine(m); setIsMachineDuplicate(false); setIsMachineModalOpen(true); }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
                       title={isAr ? 'تعديل' : 'Edit'}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -1261,8 +1320,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                             </span>
                           )}
                           <button
-                            onClick={() => { setPartnerModalType('CUSTOMER'); setSelectedPartner(c); setIsPartnerModalOpen(true); }}
-                            className="p-1 rounded text-slate-400 hover:text-teal-600 hover:bg-white transition"
+                            onClick={() => { setPartnerModalType('CUSTOMER'); setSelectedPartner(c); setIsPartnerDuplicate(true); setIsPartnerModalOpen(true); }}
+                            className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-white transition cursor-pointer"
+                            title={isAr ? 'نسخ وتكرار سريع' : 'Duplicate Customer'}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => { setPartnerModalType('CUSTOMER'); setSelectedPartner(c); setIsPartnerDuplicate(false); setIsPartnerModalOpen(true); }}
+                            className="p-1 rounded text-slate-400 hover:text-teal-600 hover:bg-white transition cursor-pointer"
                             title={isAr ? 'تعديل' : 'Edit'}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -1326,8 +1392,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                             {s.defaultCurrency || 'EGP'}
                           </span>
                           <button
-                            onClick={() => { setPartnerModalType('SUPPLIER'); setSelectedPartner(s); setIsPartnerModalOpen(true); }}
-                            className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-white transition"
+                            onClick={() => { setPartnerModalType('SUPPLIER'); setSelectedPartner(s); setIsPartnerDuplicate(true); setIsPartnerModalOpen(true); }}
+                            className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-white transition cursor-pointer"
+                            title={isAr ? 'نسخ وتكرار سريع' : 'Duplicate Supplier'}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => { setPartnerModalType('SUPPLIER'); setSelectedPartner(s); setIsPartnerDuplicate(false); setIsPartnerModalOpen(true); }}
+                            className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-white transition cursor-pointer"
                             title={isAr ? 'تعديل' : 'Edit'}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -1373,8 +1446,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
                   </span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => { setSelectedUOM(u); setIsUOMModalOpen(true); }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition"
+                      onClick={() => { setSelectedUOM(u); setIsUOMDuplicate(true); setIsUOMModalOpen(true); }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                      title={isAr ? 'نسخ وتكرار سريع' : 'Duplicate UOM'}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => { setSelectedUOM(u); setIsUOMDuplicate(false); setIsUOMModalOpen(true); }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition cursor-pointer"
                       title={isAr ? 'تعديل' : 'Edit'}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -1584,56 +1664,65 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
       <ItemCategoryModal
         isOpen={isCategoryModalOpen}
         category={selectedCategory}
-        onClose={() => { setIsCategoryModalOpen(false); setSelectedCategory(null); }}
+        isDuplicate={isCategoryDuplicate}
+        onClose={() => { setIsCategoryModalOpen(false); setSelectedCategory(null); setIsCategoryDuplicate(false); }}
       />
 
       <RawMaterialModal
         isOpen={isRawModalOpen}
         material={selectedRaw}
-        onClose={() => { setIsRawModalOpen(false); setSelectedRaw(null); }}
+        isDuplicate={isRawDuplicate}
+        onClose={() => { setIsRawModalOpen(false); setSelectedRaw(null); setIsRawDuplicate(false); }}
       />
 
       <ProductModal
         isOpen={isProdModalOpen}
         product={selectedProd}
-        onClose={() => { setIsProdModalOpen(false); setSelectedProd(null); }}
+        isDuplicate={isProdDuplicate}
+        onClose={() => { setIsProdModalOpen(false); setSelectedProd(null); setIsProdDuplicate(false); }}
       />
 
       <BOMModal
         isOpen={isBOMModalOpen}
         bom={selectedBOM}
-        onClose={() => { setIsBOMModalOpen(false); setSelectedBOM(null); }}
+        isDuplicate={isBOMDuplicate}
+        onClose={() => { setIsBOMModalOpen(false); setSelectedBOM(null); setIsBOMDuplicate(false); }}
       />
 
       <WarehouseModal
         isOpen={isWhModalOpen}
         warehouse={selectedWh}
-        onClose={() => { setIsWhModalOpen(false); setSelectedWh(null); }}
+        isDuplicate={isWhDuplicate}
+        onClose={() => { setIsWhModalOpen(false); setSelectedWh(null); setIsWhDuplicate(false); }}
       />
 
       <LocationModal
         isOpen={isLocModalOpen}
         location={selectedLoc}
-        onClose={() => { setIsLocModalOpen(false); setSelectedLoc(null); }}
+        isDuplicate={isLocDuplicate}
+        onClose={() => { setIsLocModalOpen(false); setSelectedLoc(null); setIsLocDuplicate(false); }}
       />
 
       <MachineModal
         isOpen={isMachineModalOpen}
         machine={selectedMachine}
-        onClose={() => { setIsMachineModalOpen(false); setSelectedMachine(null); }}
+        isDuplicate={isMachineDuplicate}
+        onClose={() => { setIsMachineModalOpen(false); setSelectedMachine(null); setIsMachineDuplicate(false); }}
       />
 
       <PartnerModal
         isOpen={isPartnerModalOpen}
         type={partnerModalType}
         partner={selectedPartner}
-        onClose={() => { setIsPartnerModalOpen(false); setSelectedPartner(null); }}
+        isDuplicate={isPartnerDuplicate}
+        onClose={() => { setIsPartnerModalOpen(false); setSelectedPartner(null); setIsPartnerDuplicate(false); }}
       />
 
       <UOMModal
         isOpen={isUOMModalOpen}
         uom={selectedUOM}
-        onClose={() => { setIsUOMModalOpen(false); setSelectedUOM(null); }}
+        isDuplicate={isUOMDuplicate}
+        onClose={() => { setIsUOMModalOpen(false); setSelectedUOM(null); setIsUOMDuplicate(false); }}
       />
 
       <CurrencyModal

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Save } from 'lucide-react';
+import { X, Users, Save, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Customer, Supplier } from '../../types';
+import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
 
 interface PartnerModalProps {
   isOpen: boolean;
   type: 'CUSTOMER' | 'SUPPLIER';
   partner?: Customer | Supplier | null;
+  isDuplicate?: boolean;
   onClose: () => void;
 }
 
@@ -14,9 +16,10 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
   isOpen,
   type,
   partner,
+  isDuplicate = false,
   onClose
 }) => {
-  const { language, saveCustomer, saveSupplier } = useApp();
+  const { language, customers, suppliers, saveCustomer, saveSupplier } = useApp();
   const isAr = language === 'ar';
   const isCustomer = type === 'CUSTOMER';
 
@@ -36,7 +39,19 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
 
   useEffect(() => {
     if (partner) {
-      setFormData(partner);
+      if (isDuplicate) {
+        const existingCodes = (isCustomer ? customers : suppliers).map(p => p.code);
+        setFormData({
+          ...partner,
+          id: `${isCustomer ? 'cust' : 'supp'}-${Date.now()}`,
+          code: generateNextSequentialCode(partner.code, existingCodes),
+          nameAr: generateDuplicateName(partner.nameAr, true),
+          nameEn: generateDuplicateName(partner.nameEn || '', false),
+          odooPartnerId: undefined // Reset external link for duplicate
+        });
+      } else {
+        setFormData(partner);
+      }
     } else {
       setFormData({
         id: `${isCustomer ? 'cust' : 'supp'}-${Date.now()}`,
@@ -53,7 +68,7 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
         odooPartnerId: undefined
       });
     }
-  }, [partner, isOpen, isCustomer]);
+  }, [partner, isOpen, isDuplicate, isCustomer, customers, suppliers]);
 
   if (!isOpen) return null;
 
@@ -63,7 +78,7 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
 
     if (isCustomer) {
       const cust: Customer = {
-        id: partner?.id || formData.id || `cust-${Date.now()}`,
+        id: (isDuplicate ? null : partner?.id) || formData.id || `cust-${Date.now()}`,
         code: formData.code.trim(),
         nameAr: formData.nameAr.trim(),
         nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
@@ -80,7 +95,7 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
       saveCustomer(cust);
     } else {
       const supp: Supplier = {
-        id: partner?.id || formData.id || `supp-${Date.now()}`,
+        id: (isDuplicate ? null : partner?.id) || formData.id || `supp-${Date.now()}`,
         code: formData.code.trim(),
         nameAr: formData.nameAr.trim(),
         nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
@@ -104,17 +119,34 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
       <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
-              <Users className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isDuplicate
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-teal-50 text-teal-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <Users className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {partner
-                  ? isAr ? (isCustomer ? 'تعديل بيانات العميل' : 'تعديل بيانات المورد') : (isCustomer ? 'Edit Customer' : 'Edit Supplier')
-                  : isAr ? (isCustomer ? 'إضافة عميل جديد' : 'إضافة مورد جديد') : (isCustomer ? 'Add New Customer' : 'Add New Supplier')}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {isDuplicate
+                    ? isAr
+                      ? (isCustomer ? 'نسخ وتكرار بيانات العميل' : 'نسخ وتكرار بيانات المورد')
+                      : (isCustomer ? 'Duplicate Customer' : 'Duplicate Supplier')
+                    : partner
+                    ? isAr ? (isCustomer ? 'تعديل بيانات العميل' : 'تعديل بيانات المورد') : (isCustomer ? 'Edit Customer' : 'Edit Supplier')
+                    : isAr ? (isCustomer ? 'إضافة عميل جديد' : 'إضافة مورد جديد') : (isCustomer ? 'Add New Customer' : 'Add New Supplier')}
+                </h3>
+                {isDuplicate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {isAr ? 'نسخ سريع' : 'Quick Duplicate'}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-500">
-                {isAr ? 'البيانات التجارية والضريبية ومزامنة Odoo Partner ID' : 'Commercial, tax, and Odoo res.partner mapping'}
+                {isDuplicate
+                  ? isAr ? 'تم نسخ جميع البيانات والشروط التجارية وتوليد كود تسلسلي جديد. يمكنك تعديل الاسم والحفظ مباشرة.' : 'Cloned partner with next sequential code. Edit name/contact and save.'
+                  : isAr ? 'البيانات التجارية والضريبية ومزامنة Odoo Partner ID' : 'Commercial, tax, and Odoo res.partner mapping'}
               </p>
             </div>
           </div>
@@ -285,10 +317,18 @@ export const PartnerModal: React.FC<PartnerModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+                isDuplicate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-teal-600 hover:bg-teal-700'
+              }`}
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isAr ? (isCustomer ? 'حفظ العميل' : 'حفظ المورد') : 'Save Partner'}</span>
+              {isDuplicate ? <Copy className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>
+                {isDuplicate
+                  ? isAr ? (isCustomer ? 'إضافة وتكويد العميل المنسوخ' : 'إضافة وتكويد المورد المنسوخ') : 'Add Cloned Partner'
+                  : isAr ? (isCustomer ? 'حفظ العميل' : 'حفظ المورد') : 'Save Partner'}
+              </span>
             </button>
           </div>
         </form>

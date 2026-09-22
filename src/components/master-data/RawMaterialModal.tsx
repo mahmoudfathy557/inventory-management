@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { X, Layers, Save, Bookmark, Plus, CheckCircle2 } from 'lucide-react';
+import { X, Layers, Save, Bookmark, Plus, CheckCircle2, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { RawMaterial, ItemType, VALUATION_METHOD_LABELS, ItemCategory } from '../../types';
 import { ItemCategoryModal } from './ItemCategoryModal';
+import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
 
 interface RawMaterialModalProps {
   isOpen: boolean;
   material?: RawMaterial | null;
+  isDuplicate?: boolean;
   onClose: () => void;
 }
 
-export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({ isOpen, material, onClose }) => {
-  const { language, warehouses, uoms, itemCategories, saveRawMaterial } = useApp();
+export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({
+  isOpen,
+  material,
+  isDuplicate = false,
+  onClose
+}) => {
+  const { language, rawMaterials, warehouses, uoms, itemCategories, saveRawMaterial } = useApp();
   const isAr = language === 'ar';
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
@@ -42,7 +49,21 @@ export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({ isOpen, mate
 
   useEffect(() => {
     if (material) {
-      setFormData(material);
+      if (isDuplicate) {
+        const existingCodes = rawMaterials.map(r => r.code);
+        const nextCode = generateNextSequentialCode(material.code, existingCodes);
+        setFormData({
+          ...material,
+          id: `rm-${Date.now()}`,
+          code: nextCode,
+          nameAr: generateDuplicateName(material.nameAr, true),
+          nameEn: generateDuplicateName(material.nameEn || '', false),
+          currentQty: 0,
+          totalValue: 0
+        });
+      } else {
+        setFormData(material);
+      }
     } else {
       setFormData({
         id: `rm-${Date.now()}`,
@@ -70,7 +91,7 @@ export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({ isOpen, mate
         notes: ''
       });
     }
-  }, [material, isOpen, warehouses]);
+  }, [material, isOpen, isDuplicate, rawMaterials, warehouses]);
 
   if (!isOpen) return null;
 
@@ -106,7 +127,7 @@ export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({ isOpen, mate
     if (!formData.code || !formData.nameAr) return;
 
     const finalItem: RawMaterial = {
-      id: material?.id || formData.id || `rm-${Date.now()}`,
+      id: (isDuplicate ? null : material?.id) || formData.id || `rm-${Date.now()}`,
       code: formData.code.trim(),
       nameAr: formData.nameAr.trim(),
       nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
@@ -140,17 +161,32 @@ export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({ isOpen, mate
       <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Layers className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isDuplicate
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-blue-50 text-blue-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {material
-                  ? isAr ? 'تعديل بيانات مادة خام' : 'Edit Raw Material'
-                  : isAr ? 'إضافة مادة خام جديدة' : 'Add New Raw Material'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {isDuplicate
+                    ? isAr ? 'نسخ وتكرار مادة خام (صنف جديد)' : 'Duplicate Raw Material'
+                    : material
+                    ? isAr ? 'تعديل بيانات مادة خام' : 'Edit Raw Material'
+                    : isAr ? 'إضافة مادة خام جديدة' : 'Add New Raw Material'}
+                </h3>
+                {isDuplicate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {isAr ? 'نسخ سريع' : 'Quick Duplicate'}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-500">
-                {isAr ? 'تعريف كود الصنف ووحدات القياس وحدود المخزون ومستودع الحفظ' : 'Item details, UOMs, stock bounds, and default warehouse'}
+                {isDuplicate
+                  ? isAr ? 'تم نسخ جميع الخصائص والمواصفات وتوليد كود تسلسلي جديد. عدّل الاسم والتفاصيل واحفظ مباشرة.' : 'Cloned with next sequential code. Edit name/specs and save as a new item.'
+                  : isAr ? 'تعريف كود الصنف ووحدات القياس وحدود المخزون ومستودع الحفظ' : 'Item details, UOMs, stock bounds, and default warehouse'}
               </p>
             </div>
           </div>
@@ -410,10 +446,18 @@ export const RawMaterialModal: React.FC<RawMaterialModalProps> = ({ isOpen, mate
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+                isDuplicate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isAr ? 'حفظ البيانات' : 'Save Material'}</span>
+              {isDuplicate ? <Copy className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>
+                {isDuplicate
+                  ? isAr ? 'إضافة وتكويد الخامة المنسوخة' : 'Add Cloned Material'
+                  : isAr ? 'حفظ البيانات' : 'Save Material'}
+              </span>
             </button>
           </div>
         </form>

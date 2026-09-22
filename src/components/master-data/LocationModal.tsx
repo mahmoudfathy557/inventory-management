@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { X, MapPin, Save } from 'lucide-react';
+import { X, MapPin, Save, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ProductionLocation } from '../../types';
+import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
 
 interface LocationModalProps {
   isOpen: boolean;
   location?: ProductionLocation | null;
+  isDuplicate?: boolean;
   onClose: () => void;
 }
 
-export const LocationModal: React.FC<LocationModalProps> = ({ isOpen, location, onClose }) => {
-  const { language, warehouses, saveLocation } = useApp();
+export const LocationModal: React.FC<LocationModalProps> = ({
+  isOpen,
+  location,
+  isDuplicate = false,
+  onClose
+}) => {
+  const { language, locations, warehouses, saveLocation } = useApp();
   const isAr = language === 'ar';
 
   const [formData, setFormData] = useState<Partial<ProductionLocation>>({
@@ -25,7 +32,18 @@ export const LocationModal: React.FC<LocationModalProps> = ({ isOpen, location, 
 
   useEffect(() => {
     if (location) {
-      setFormData(location);
+      if (isDuplicate) {
+        const existingCodes = locations.map(l => l.code);
+        setFormData({
+          ...location,
+          id: `loc-${Date.now()}`,
+          code: generateNextSequentialCode(location.code, existingCodes),
+          nameAr: generateDuplicateName(location.nameAr, true),
+          nameEn: generateDuplicateName(location.nameEn || '', false)
+        });
+      } else {
+        setFormData(location);
+      }
     } else {
       setFormData({
         id: `loc-${Date.now()}`,
@@ -38,7 +56,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({ isOpen, location, 
         notes: ''
       });
     }
-  }, [location, isOpen, warehouses]);
+  }, [location, isOpen, isDuplicate, locations, warehouses]);
 
   if (!isOpen) return null;
 
@@ -47,7 +65,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({ isOpen, location, 
     if (!formData.code || !formData.nameAr) return;
 
     const finalLoc: ProductionLocation = {
-      id: location?.id || formData.id || `loc-${Date.now()}`,
+      id: (isDuplicate ? null : location?.id) || formData.id || `loc-${Date.now()}`,
       code: formData.code.trim(),
       nameAr: formData.nameAr.trim(),
       nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
@@ -66,17 +84,32 @@ export const LocationModal: React.FC<LocationModalProps> = ({ isOpen, location, 
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <MapPin className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isDuplicate
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-indigo-50 text-indigo-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {location
-                  ? isAr ? 'تعديل موقع إنتاج / مرحلة' : 'Edit Production Location'
-                  : isAr ? 'إضافة موقع إنتاج / مرحلة تشغيل' : 'Add Production Location'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {isDuplicate
+                    ? isAr ? 'نسخ وتكرار موقع إنتاج / مرحلة' : 'Duplicate Location'
+                    : location
+                    ? isAr ? 'تعديل موقع إنتاج / مرحلة' : 'Edit Production Location'
+                    : isAr ? 'إضافة موقع إنتاج جديد' : 'Add Production Location'}
+                </h3>
+                {isDuplicate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {isAr ? 'نسخ سريع' : 'Quick Duplicate'}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-500">
-                {isAr ? 'موقع فعلي أو مرحلة تشغيلية داخل صالة التصنيع' : 'Floor stage or physical location within WIP'}
+                {isDuplicate
+                  ? isAr ? 'تم نسخ الموقع وتوليد كود تسلسلي جديد. يمكنك تعديل الاسم والمرحلة وحفظ الموقع الجديد.' : 'Cloned location with next sequential code. Edit name/stage and save.'
+                  : isAr ? 'ربط مرحلة العمل بمستودع التشغيل قيد التنفيذ (WIP)' : 'Link stage to WIP warehouse'}
               </p>
             </div>
           </div>
@@ -170,10 +203,18 @@ export const LocationModal: React.FC<LocationModalProps> = ({ isOpen, location, 
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+                isDuplicate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isAr ? 'حفظ الموقع' : 'Save Location'}</span>
+              {isDuplicate ? <Copy className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>
+                {isDuplicate
+                  ? isAr ? 'إضافة وتكويد الموقع المنسوخ' : 'Add Cloned Location'
+                  : isAr ? 'حفظ الموقع' : 'Save Location'}
+              </span>
             </button>
           </div>
         </form>

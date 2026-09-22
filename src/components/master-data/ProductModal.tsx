@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, Save, Bookmark, Plus, CheckCircle2 } from 'lucide-react';
+import { X, Package, Save, Bookmark, Plus, CheckCircle2, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ItemType, VALUATION_METHOD_LABELS, ItemCategory } from '../../types';
 import { ItemCategoryModal } from './ItemCategoryModal';
+import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
 
 interface ProductModalProps {
   isOpen: boolean;
   product?: Product | null;
+  isDuplicate?: boolean;
   onClose: () => void;
 }
 
-export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onClose }) => {
-  const { language, warehouses, uoms, itemCategories, saveProduct } = useApp();
+export const ProductModal: React.FC<ProductModalProps> = ({
+  isOpen,
+  product,
+  isDuplicate = false,
+  onClose
+}) => {
+  const { language, products, warehouses, uoms, itemCategories, saveProduct } = useApp();
   const isAr = language === 'ar';
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
@@ -38,7 +45,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
 
   useEffect(() => {
     if (product) {
-      setFormData(product);
+      if (isDuplicate) {
+        const existingCodes = products.map(p => p.code);
+        const nextCode = generateNextSequentialCode(product.code, existingCodes);
+        setFormData({
+          ...product,
+          id: `fp-${Date.now()}`,
+          code: nextCode,
+          nameAr: generateDuplicateName(product.nameAr, true),
+          nameEn: generateDuplicateName(product.nameEn || '', false),
+          currentQty: 0,
+          totalValue: 0
+        });
+      } else {
+        setFormData(product);
+      }
     } else {
       setFormData({
         id: `fp-${Date.now()}`,
@@ -62,7 +83,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
         notes: ''
       });
     }
-  }, [product, isOpen, warehouses]);
+  }, [product, isOpen, isDuplicate, products, warehouses]);
 
   if (!isOpen) return null;
 
@@ -98,7 +119,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
     if (!formData.code || !formData.nameAr) return;
 
     const finalItem: Product = {
-      id: product?.id || formData.id || `fp-${Date.now()}`,
+      id: (isDuplicate ? null : product?.id) || formData.id || `fp-${Date.now()}`,
       code: formData.code.trim(),
       nameAr: formData.nameAr.trim(),
       nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
@@ -128,17 +149,32 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
       <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Package className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isDuplicate
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-emerald-50 text-emerald-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <Package className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {product
-                  ? isAr ? 'تعديل بيانات المنتج' : 'Edit Product'
-                  : isAr ? 'إضافة منتج جديد' : 'Add New Product'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {isDuplicate
+                    ? isAr ? 'نسخ وتكرار منتج (تكويد صنف جديد)' : 'Duplicate Product'
+                    : product
+                    ? isAr ? 'تعديل بيانات المنتج' : 'Edit Product'
+                    : isAr ? 'إضافة منتج جديد' : 'Add New Product'}
+                </h3>
+                {isDuplicate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {isAr ? 'نسخ سريع' : 'Quick Duplicate'}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-500">
-                {isAr ? 'منتج تام جاهز للبيع أو منتج وسيط نصف مصنع' : 'Finished goods or semi-finished items'}
+                {isDuplicate
+                  ? isAr ? 'تم نسخ جميع الخصائص والمواصفات وتوليد كود تسلسلي جديد. عدّل الاسم والتفاصيل واحفظ مباشرة.' : 'Cloned with next sequential code. Edit name/specs and save as a new item.'
+                  : isAr ? 'منتج تام جاهز للبيع أو منتج وسيط نصف مصنع أو هالك' : 'Finished goods, semi-finished, or scrap items'}
               </p>
             </div>
           </div>
@@ -373,10 +409,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, product, onC
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+                isDuplicate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isAr ? 'حفظ المنتج' : 'Save Product'}</span>
+              {isDuplicate ? <Copy className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>
+                {isDuplicate
+                  ? isAr ? 'إضافة وتكويد المنتج المنسوخ' : 'Add Cloned Product'
+                  : isAr ? 'حفظ المنتج' : 'Save Product'}
+              </span>
             </button>
           </div>
         </form>

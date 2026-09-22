@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, Save } from 'lucide-react';
+import { X, Building2, Save, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Warehouse, WarehouseType } from '../../types';
+import { generateNextSequentialCode, generateDuplicateName } from '../../utils/codeGenerator';
 
 interface WarehouseModalProps {
   isOpen: boolean;
   warehouse?: Warehouse | null;
+  isDuplicate?: boolean;
   onClose: () => void;
 }
 
-export const WarehouseModal: React.FC<WarehouseModalProps> = ({ isOpen, warehouse, onClose }) => {
-  const { language, saveWarehouse } = useApp();
+export const WarehouseModal: React.FC<WarehouseModalProps> = ({
+  isOpen,
+  warehouse,
+  isDuplicate = false,
+  onClose
+}) => {
+  const { language, warehouses, saveWarehouse } = useApp();
   const isAr = language === 'ar';
 
   const [formData, setFormData] = useState<Partial<Warehouse>>({
@@ -24,7 +31,18 @@ export const WarehouseModal: React.FC<WarehouseModalProps> = ({ isOpen, warehous
 
   useEffect(() => {
     if (warehouse) {
-      setFormData(warehouse);
+      if (isDuplicate) {
+        const existingCodes = warehouses.map(w => w.code);
+        setFormData({
+          ...warehouse,
+          id: `wh-${Date.now()}`,
+          code: generateNextSequentialCode(warehouse.code, existingCodes),
+          nameAr: generateDuplicateName(warehouse.nameAr, true),
+          nameEn: generateDuplicateName(warehouse.nameEn || '', false)
+        });
+      } else {
+        setFormData(warehouse);
+      }
     } else {
       setFormData({
         id: `wh-${Date.now()}`,
@@ -36,7 +54,7 @@ export const WarehouseModal: React.FC<WarehouseModalProps> = ({ isOpen, warehous
         notes: ''
       });
     }
-  }, [warehouse, isOpen]);
+  }, [warehouse, isOpen, isDuplicate, warehouses]);
 
   if (!isOpen) return null;
 
@@ -45,7 +63,7 @@ export const WarehouseModal: React.FC<WarehouseModalProps> = ({ isOpen, warehous
     if (!formData.code || !formData.nameAr) return;
 
     const finalWh: Warehouse = {
-      id: warehouse?.id || formData.id || `wh-${Date.now()}`,
+      id: (isDuplicate ? null : warehouse?.id) || formData.id || `wh-${Date.now()}`,
       code: formData.code.trim(),
       nameAr: formData.nameAr.trim(),
       nameEn: formData.nameEn?.trim() || formData.nameAr.trim(),
@@ -63,17 +81,32 @@ export const WarehouseModal: React.FC<WarehouseModalProps> = ({ isOpen, warehous
       <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Building2 className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isDuplicate
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-blue-50 text-blue-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {warehouse
-                  ? isAr ? 'تعديل بيانات المستودع' : 'Edit Warehouse'
-                  : isAr ? 'إضافة مستودع تخزين جديد' : 'Add New Warehouse'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">
+                  {isDuplicate
+                    ? isAr ? 'نسخ وتكرار مستودع تخزين' : 'Duplicate Warehouse'
+                    : warehouse
+                    ? isAr ? 'تعديل بيانات المستودع' : 'Edit Warehouse'
+                    : isAr ? 'إضافة مستودع تخزين جديد' : 'Add New Warehouse'}
+                </h3>
+                {isDuplicate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {isAr ? 'نسخ سريع' : 'Quick Duplicate'}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-500">
-                {isAr ? 'مستودع مواد خام، تشغيل WIP، منتج تام، أو هالك' : 'Raw, WIP, Finished Goods, or Scrap warehouse'}
+                {isDuplicate
+                  ? isAr ? 'تم نسخ بيانات المستودع وتوليد كود تسلسلي جديد. يمكنك تعديل الاسم والموقع والحفظ مباشرة.' : 'Cloned warehouse with next sequential code. Edit name/notes and save.'
+                  : isAr ? 'مستودع مواد خام، تشغيل WIP، منتج تام، أو هالك' : 'Raw, WIP, Finished Goods, or Scrap warehouse'}
               </p>
             </div>
           </div>
@@ -174,10 +207,18 @@ export const WarehouseModal: React.FC<WarehouseModalProps> = ({ isOpen, warehous
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer ${
+                isDuplicate
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isAr ? 'حفظ المستودع' : 'Save Warehouse'}</span>
+              {isDuplicate ? <Copy className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>
+                {isDuplicate
+                  ? isAr ? 'إضافة وتكويد المستودع المنسوخ' : 'Add Cloned Warehouse'
+                  : isAr ? 'حفظ المستودع' : 'Save Warehouse'}
+              </span>
             </button>
           </div>
         </form>
