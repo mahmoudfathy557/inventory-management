@@ -358,6 +358,44 @@ router.post('/data/sync-full', authenticateToken, async (req: Request, res: Resp
   });
 });
 
+// POST /api/data/reset-scratch (Wipes all inventory and transaction data, preserving only users)
+router.post('/data/reset-scratch', authenticateToken, async (req: Request, res: Response) => {
+  const db = getDb();
+  if (db && isDbConnected()) {
+    try {
+      await db.delete(appEntitiesTable);
+      await db.delete(auditLogsTable);
+    } catch (err: any) {
+      console.warn('DB reset-scratch error:', err?.message);
+    }
+  }
+  inMemoryEntities = {
+    rawMaterials: [],
+    products: [],
+    boms: [],
+    machines: [],
+    suppliers: [],
+    customers: [],
+    receipts: [],
+    landedCosts: [],
+    issues: [],
+    transfers: [],
+    productionOrders: [],
+    materialIssues: [],
+    productionReceipts: [],
+    customerDeliveries: [],
+    costAdjustments: [],
+    ledgerEntries: [],
+    auditLogs: []
+  };
+
+  return res.json({
+    success: true,
+    message: 'All inventory, production, and transaction data cleared. Users preserved.',
+    isPostgresConnected: isDbConnected()
+  });
+});
+
 // POST /api/seed (Seed 100% coverage dataset into database)
 router.post('/seed', async (req: Request, res: Response) => {
   const db = getDb();

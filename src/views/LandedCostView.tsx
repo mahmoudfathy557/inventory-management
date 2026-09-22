@@ -33,7 +33,8 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
     cancelTransaction,
     rawMaterials,
     currencies,
-    currentUser
+    currentUser,
+    getExchangeRateForDate
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
@@ -42,6 +43,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
   const [printCost, setPrintCost] = useState<LandedCost | null>(null);
 
   // Form states
+  const [costDate, setCostDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedReceiptId, setSelectedReceiptId] = useState(
     preselectedReceiptId || receipts[0]?.id || ''
   );
@@ -64,12 +66,30 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
   const simulatedNewVal = currentItemVal + amountEGP;
   const simulatedNewMAC = currentItemQty > 0 ? simulatedNewVal / currentItemQty : currentMAC;
 
+  const handleCurrencyChange = (newCurr: string) => {
+    setCurrency(newCurr);
+    if (newCurr === 'EGP') {
+      setExchangeRate(1.0);
+    } else {
+      const lookup = getExchangeRateForDate(newCurr, costDate);
+      setExchangeRate(lookup.rate);
+    }
+  };
+
+  const handleDateChange = (newDate: string) => {
+    setCostDate(newDate);
+    if (currency !== 'EGP') {
+      const lookup = getExchangeRateForDate(currency, newDate);
+      setExchangeRate(lookup.rate);
+    }
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedReceipt || amountEGP <= 0) return;
 
     addLandedCost({
-      date: new Date().toISOString().split('T')[0],
+      date: costDate || new Date().toISOString().split('T')[0],
       originalReceiptId: selectedReceipt.id,
       originalReceiptNumber: selectedReceipt.receiptNumber,
       itemId: selectedReceipt.itemId,
@@ -325,8 +345,21 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
                 </div>
               </div>
 
-              {/* Amount & Currency */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Date, Amount, Currency & Rate */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'تاريخ التكلفة *' : 'Cost Date *'}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={costDate}
+                    onChange={e => handleDateChange(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
+                  />
+                </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     {isAr ? 'مبلغ التكلفة *' : 'Amount *'}
@@ -337,7 +370,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
                     step="any"
                     value={amount}
                     onChange={e => setAmount(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold"
+                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-xs"
                     required
                   />
                 </div>
@@ -348,12 +381,8 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
                   </label>
                   <select
                     value={currency}
-                    onChange={e => {
-                      setCurrency(e.target.value);
-                      const c = currencies.find(curr => curr.code === e.target.value);
-                      if (c) setExchangeRate(c.exchangeRate);
-                    }}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                    onChange={e => handleCurrencyChange(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs font-mono font-bold"
                   >
                     {currencies.map(c => (
                       <option key={c.id} value={c.code}>
@@ -369,11 +398,11 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.0001"
                     value={exchangeRate}
                     onChange={e => setExchangeRate(parseFloat(e.target.value) || 1)}
                     disabled={currency === 'EGP'}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-slate-50 font-mono"
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-slate-50 font-mono text-xs font-bold text-emerald-800 disabled:opacity-60"
                   />
                 </div>
               </div>

@@ -4,6 +4,7 @@ import {
   ProductionLocation,
   UOM,
   Currency,
+  CurrencyRate,
   RawMaterial,
   Product,
   ItemType,
@@ -118,13 +119,25 @@ export const INITIAL_UOMS: UOM[] = [
 ];
 
 export const INITIAL_CURRENCIES: Currency[] = [
-  { id: 'curr-egp', code: 'EGP', nameAr: 'جنيه مصري', nameEn: 'Egyptian Pound', exchangeRate: 1.0, rateDate: '2026-09-20', isBase: true, active: true },
-  { id: 'curr-usd', code: 'USD', nameAr: 'دولار أمريكي', nameEn: 'US Dollar', exchangeRate: 48.50, rateDate: '2026-09-20', isBase: false, active: true },
-  { id: 'curr-eur', code: 'EUR', nameAr: 'يورو أوروبي', nameEn: 'Euro', exchangeRate: 52.80, rateDate: '2026-09-20', isBase: false, active: true },
-  { id: 'curr-gbp', code: 'GBP', nameAr: 'جنيه إسترليني', nameEn: 'British Pound', exchangeRate: 63.20, rateDate: '2026-09-20', isBase: false, active: true }
+  { id: 'curr-egp', code: 'EGP', nameAr: 'جنيه مصري (العملة الأساسية)', nameEn: 'Egyptian Pound', exchangeRate: 1.0, rateDate: '2026-09-22', isBase: true, active: true },
+  { id: 'curr-usd', code: 'USD', nameAr: 'دولار أمريكي', nameEn: 'US Dollar', exchangeRate: 49.50, rateDate: '2026-09-22', isBase: false, active: true },
+  { id: 'curr-eur', code: 'EUR', nameAr: 'يورو أوروبي', nameEn: 'Euro', exchangeRate: 54.20, rateDate: '2026-09-22', isBase: false, active: true },
+  { id: 'curr-sar', code: 'SAR', nameAr: 'ريال سعودي', nameEn: 'Saudi Riyal', exchangeRate: 13.20, rateDate: '2026-09-22', isBase: false, active: true },
+  { id: 'curr-gbp', code: 'GBP', nameAr: 'جنيه إسترليني', nameEn: 'British Pound', exchangeRate: 64.10, rateDate: '2026-09-22', isBase: false, active: true }
 ];
 
-export const INITIAL_RAW_MATERIALS: RawMaterial[] = [
+export const INITIAL_CURRENCY_RATES: CurrencyRate[] = [
+  { id: 'rate-usd-1', currencyCode: 'USD', rateDate: '2026-09-20', rate: 49.20, source: 'البنك المركزي المصري', notes: 'سعر إقفال الأسبوع' },
+  { id: 'rate-usd-2', currencyCode: 'USD', rateDate: '2026-09-22', rate: 49.50, source: 'البنك المركزي المصري', notes: 'سعر الصرف الرسمي المعلن' },
+  { id: 'rate-eur-1', currencyCode: 'EUR', rateDate: '2026-09-20', rate: 53.90, source: 'البنك المركزي المصري', notes: 'سعر إقفال الأسبوع' },
+  { id: 'rate-eur-2', currencyCode: 'EUR', rateDate: '2026-09-22', rate: 54.20, source: 'البنك المركزي المصري', notes: 'سعر الصرف الرسمي المعلن' },
+  { id: 'rate-sar-1', currencyCode: 'SAR', rateDate: '2026-09-22', rate: 13.20, source: 'البنك المركزي المصري', notes: 'سعر الصرف المعلن' },
+  { id: 'rate-gbp-1', currencyCode: 'GBP', rateDate: '2026-09-22', rate: 64.10, source: 'البنك المركزي المصري', notes: 'سعر الصرف المعلن' }
+];
+
+export const INITIAL_RAW_MATERIALS: RawMaterial[] = [];
+
+export const SAMPLE_RAW_MATERIALS: RawMaterial[] = [
   {
     id: 'rm-poly-01',
     code: 'RM-HDPE-100',
@@ -185,7 +198,9 @@ export const INITIAL_RAW_MATERIALS: RawMaterial[] = [
   }
 ];
 
-export const INITIAL_PRODUCTS: Product[] = [
+export const INITIAL_PRODUCTS: Product[] = [];
+
+export const SAMPLE_PRODUCTS: Product[] = [
   {
     id: 'fp-pipe-50',
     code: 'FP-PIPE-50MM',
@@ -219,7 +234,9 @@ export const INITIAL_PRODUCTS: Product[] = [
   }
 ];
 
-export const INITIAL_MACHINES: Machine[] = [
+export const INITIAL_MACHINES: Machine[] = [];
+
+export const SAMPLE_MACHINES: Machine[] = [
   {
     id: 'mach-ext-1',
     code: 'MCH-EXT-01',
@@ -242,7 +259,9 @@ export const INITIAL_MACHINES: Machine[] = [
   }
 ];
 
-export const INITIAL_SUPPLIERS: Supplier[] = [
+export const INITIAL_SUPPLIERS: Supplier[] = [];
+
+export const SAMPLE_SUPPLIERS: Supplier[] = [
   {
     id: 'sup-sabic',
     code: 'SUP-001',
@@ -271,7 +290,9 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
   }
 ];
 
-export const INITIAL_CUSTOMERS: Customer[] = [
+export const INITIAL_CUSTOMERS: Customer[] = [];
+
+export const SAMPLE_CUSTOMERS: Customer[] = [
   {
     id: 'cust-orascom',
     code: 'CUST-001',
@@ -316,7 +337,9 @@ export const INITIAL_CUSTOMERS: Customer[] = [
   }
 ];
 
-export const INITIAL_BOMS: BOM[] = [
+export const INITIAL_BOMS: BOM[] = [];
+
+export const SAMPLE_BOMS: BOM[] = [
   {
     id: 'bom-pipe-50-v1',
     code: 'BOM-PIPE-50-V1',
@@ -468,7 +491,9 @@ export const INITIAL_USERS: User[] = [
 ];
 
 // Pre-seeded MVP Walkthrough records demonstrating the exact business flow in Section 47
-export const INITIAL_RECEIPTS: InventoryReceipt[] = [
+export const INITIAL_RECEIPTS: InventoryReceipt[] = [];
+
+export const SAMPLE_RECEIPTS: InventoryReceipt[] = [
   {
     id: 'rec-001',
     receiptNumber: 'REC-2026-0001',
@@ -498,7 +523,9 @@ export const INITIAL_RECEIPTS: InventoryReceipt[] = [
   }
 ];
 
-export const INITIAL_LANDED_COSTS: LandedCost[] = [
+export const INITIAL_LANDED_COSTS: LandedCost[] = [];
+
+export const SAMPLE_LANDED_COSTS: LandedCost[] = [
   {
     id: 'lc-001',
     landedCostNumber: 'LC-2026-0001',
@@ -520,7 +547,9 @@ export const INITIAL_LANDED_COSTS: LandedCost[] = [
   }
 ];
 
-export const INITIAL_TRANSFERS: InventoryTransfer[] = [
+export const INITIAL_TRANSFERS: InventoryTransfer[] = [];
+
+export const SAMPLE_TRANSFERS: InventoryTransfer[] = [
   {
     id: 'tr-001',
     transferNumber: 'TR-2026-0001',
@@ -543,7 +572,9 @@ export const INITIAL_TRANSFERS: InventoryTransfer[] = [
   }
 ];
 
-export const INITIAL_PRODUCTION_ORDERS: ProductionOrder[] = [
+export const INITIAL_PRODUCTION_ORDERS: ProductionOrder[] = [];
+
+export const SAMPLE_PRODUCTION_ORDERS: ProductionOrder[] = [
   {
     id: 'po-001',
     orderNumber: 'PO-2026-0001',
@@ -601,7 +632,9 @@ export const INITIAL_PRODUCTION_ORDERS: ProductionOrder[] = [
   }
 ];
 
-export const INITIAL_MATERIAL_ISSUES: MaterialIssue[] = [
+export const INITIAL_MATERIAL_ISSUES: MaterialIssue[] = [];
+
+export const SAMPLE_MATERIAL_ISSUES: MaterialIssue[] = [
   {
     id: 'mi-001',
     issueNumber: 'MI-2026-0001',
@@ -624,7 +657,9 @@ export const INITIAL_MATERIAL_ISSUES: MaterialIssue[] = [
   }
 ];
 
-export const INITIAL_PRODUCTION_RECEIPTS: ProductionReceipt[] = [
+export const INITIAL_PRODUCTION_RECEIPTS: ProductionReceipt[] = [];
+
+export const SAMPLE_PRODUCTION_RECEIPTS: ProductionReceipt[] = [
   {
     id: 'pr-001',
     receiptNumber: 'PR-2026-0001',
@@ -652,7 +687,9 @@ export const INITIAL_PRODUCTION_RECEIPTS: ProductionReceipt[] = [
   }
 ];
 
-export const INITIAL_CUSTOMER_DELIVERIES: CustomerDelivery[] = [
+export const INITIAL_CUSTOMER_DELIVERIES: CustomerDelivery[] = [];
+
+export const SAMPLE_CUSTOMER_DELIVERIES: CustomerDelivery[] = [
   {
     id: 'del-001',
     deliveryNumber: 'DEL-2026-0001',
@@ -678,7 +715,9 @@ export const INITIAL_CUSTOMER_DELIVERIES: CustomerDelivery[] = [
 ];
 
 // Initial complete Inventory Ledger entries matching Section 47
-export const INITIAL_LEDGER_ENTRIES: InventoryLedgerEntry[] = [
+export const INITIAL_LEDGER_ENTRIES: InventoryLedgerEntry[] = [];
+
+export const SAMPLE_LEDGER_ENTRIES: InventoryLedgerEntry[] = [
   {
     id: 'ledg-001',
     date: '2026-09-18 09:30',
@@ -857,7 +896,9 @@ export const INITIAL_LEDGER_ENTRIES: InventoryLedgerEntry[] = [
   }
 ];
 
-export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
+export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [];
+
+export const SAMPLE_AUDIT_LOGS: AuditLogEntry[] = [
   {
     id: 'aud-1',
     date: '2026-09-18',
@@ -920,7 +961,9 @@ export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
   }
 ];
 
-export const INITIAL_COST_ADJUSTMENTS: ProductionOrderCostAdjustment[] = [
+export const INITIAL_COST_ADJUSTMENTS: ProductionOrderCostAdjustment[] = [];
+
+export const SAMPLE_COST_ADJUSTMENTS: ProductionOrderCostAdjustment[] = [
   {
     id: 'ca-init-001',
     adjustmentNumber: 'CA-2026-0001',

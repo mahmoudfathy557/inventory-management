@@ -35,7 +35,8 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
     warehouses,
     suppliers,
     currencies,
-    currentUser
+    currentUser,
+    getExchangeRateForDate
   } = useApp();
   const isAr = language === 'ar';
 
@@ -45,6 +46,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
   const [cancelReason, setCancelReason] = useState('');
 
   // Form State
+  const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedItemId, setSelectedItemId] = useState(rawMaterials[0]?.id || '');
   const [selectedSupplierId, setSelectedSupplierId] = useState(suppliers[0]?.id || '');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id || '');
@@ -70,9 +72,19 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
 
   const handleCurrencyChange = (currCode: string) => {
     setSelectedCurrency(currCode);
-    const curr = currencies.find(c => c.code === currCode);
-    if (curr) {
-      setExchangeRate(curr.exchangeRate);
+    if (currCode === 'EGP') {
+      setExchangeRate(1.0);
+    } else {
+      const lookup = getExchangeRateForDate(currCode, receiptDate);
+      setExchangeRate(lookup.rate);
+    }
+  };
+
+  const handleDateChange = (newDate: string) => {
+    setReceiptDate(newDate);
+    if (selectedCurrency !== 'EGP') {
+      const lookup = getExchangeRateForDate(selectedCurrency, newDate);
+      setExchangeRate(lookup.rate);
     }
   };
 
@@ -81,7 +93,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
     if (!selectedItem || quantity <= 0) return;
 
     addReceipt({
-      date: new Date().toISOString().split('T')[0],
+      date: receiptDate || new Date().toISOString().split('T')[0],
       supplierId: selectedSupplierId,
       supplierName: selectedSupplier ? (isAr ? selectedSupplier.nameAr : selectedSupplier.nameEn) : 'مورد غير محدد',
       currency: selectedCurrency,
@@ -343,8 +355,21 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                 </div>
               </div>
 
-              {/* Warehouse & Currency */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Date, Warehouse, Currency, Rate */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'تاريخ الاستلام *' : 'Receipt Date *'}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={receiptDate}
+                    onChange={e => handleDateChange(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
+                  />
+                </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     {isAr ? 'المستودع المستلم *' : 'Target Warehouse *'}
@@ -352,7 +377,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                   <select
                     value={selectedWarehouseId}
                     onChange={e => setSelectedWarehouseId(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
                   >
                     {warehouses.map(w => (
                       <option key={w.id} value={w.id}>
@@ -369,7 +394,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                   <select
                     value={selectedCurrency}
                     onChange={e => handleCurrencyChange(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs font-mono font-bold"
                   >
                     {currencies.map(c => (
                       <option key={c.id} value={c.code}>
@@ -381,15 +406,15 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'سعر الصرف مقابل EGP' : 'Exchange Rate'}
+                    {isAr ? 'سعر الصرف (EGP)' : 'Exchange Rate'}
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.0001"
                     value={exchangeRate}
                     onChange={e => setExchangeRate(parseFloat(e.target.value) || 1)}
                     disabled={selectedCurrency === 'EGP'}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-slate-50 disabled:opacity-60 font-mono"
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-slate-50 disabled:opacity-60 font-mono text-xs font-bold text-emerald-800"
                   />
                 </div>
               </div>

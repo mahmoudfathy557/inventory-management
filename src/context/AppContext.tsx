@@ -7,6 +7,7 @@ import {
   ProductionLocation,
   UOM,
   Currency,
+  CurrencyRate,
   RawMaterial,
   Product,
   Machine,
@@ -36,6 +37,7 @@ import {
   INITIAL_LOCATIONS,
   INITIAL_UOMS,
   INITIAL_CURRENCIES,
+  INITIAL_CURRENCY_RATES,
   INITIAL_RAW_MATERIALS,
   INITIAL_PRODUCTS,
   INITIAL_MACHINES,
@@ -54,7 +56,23 @@ import {
   INITIAL_LEDGER_ENTRIES,
   INITIAL_AUDIT_LOGS,
   INITIAL_ODOO_CONFIG,
-  INITIAL_ODOO_LOGS
+  INITIAL_ODOO_LOGS,
+  SAMPLE_RAW_MATERIALS,
+  SAMPLE_PRODUCTS,
+  SAMPLE_MACHINES,
+  SAMPLE_SUPPLIERS,
+  SAMPLE_CUSTOMERS,
+  SAMPLE_BOMS,
+  SAMPLE_RECEIPTS,
+  SAMPLE_LANDED_COSTS,
+  SAMPLE_TRANSFERS,
+  SAMPLE_PRODUCTION_ORDERS,
+  SAMPLE_MATERIAL_ISSUES,
+  SAMPLE_PRODUCTION_RECEIPTS,
+  SAMPLE_CUSTOMER_DELIVERIES,
+  SAMPLE_COST_ADJUSTMENTS,
+  SAMPLE_LEDGER_ENTRIES,
+  SAMPLE_AUDIT_LOGS
 } from '../data/initialData';
 import { odooService } from '../services/odooService';
 import { authService } from '../services/authService';
@@ -99,6 +117,11 @@ interface AppContextType {
   locations: ProductionLocation[];
   uoms: UOM[];
   currencies: Currency[];
+  currencyRates: CurrencyRate[];
+  saveCurrencyRate: (rate: Omit<CurrencyRate, 'id' | 'createdAt'> & { id?: string }) => void;
+  deleteCurrencyRate: (id: string) => void;
+  getExchangeRateForDate: (currencyCode: string, date?: string) => { rate: number; rateDate: string; isExact: boolean; source?: string };
+  clearSeedDataAndStartScratch: () => void;
   rawMaterials: RawMaterial[];
   products: Product[];
   machines: Machine[];
@@ -174,7 +197,75 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const STORAGE_PREFIX = 'mfg_inv_odoo_v1_';
+const OLD_STORAGE_PREFIX = 'mfg_inv_odoo_v1_';
+const STORAGE_PREFIX = 'mfg_inv_odoo_v2_';
+
+// Automatic clean-slate migration:
+// Clears all demo inventory, raw materials, products, receipts, production orders, scrap, ledger entries, etc.
+// Preserves users, current session, warehouses, UOMs, currencies, and Odoo config.
+(function initializeCleanState() {
+  if (typeof window === 'undefined') return;
+  const migratedKey = 'mfg_clean_slate_v2_applied';
+  if (!localStorage.getItem(migratedKey)) {
+    try {
+      // 1. Preserve existing users if present
+      const existingV1Users = localStorage.getItem(OLD_STORAGE_PREFIX + 'users');
+      if (existingV1Users && !localStorage.getItem(STORAGE_PREFIX + 'users')) {
+        localStorage.setItem(STORAGE_PREFIX + 'users', existingV1Users);
+      }
+      const existingV1User = localStorage.getItem(OLD_STORAGE_PREFIX + 'user');
+      if (existingV1User && !localStorage.getItem(STORAGE_PREFIX + 'user')) {
+        localStorage.setItem(STORAGE_PREFIX + 'user', existingV1User);
+      }
+      const existingLang = localStorage.getItem(OLD_STORAGE_PREFIX + 'lang');
+      if (existingLang && !localStorage.getItem(STORAGE_PREFIX + 'lang')) {
+        localStorage.setItem(STORAGE_PREFIX + 'lang', existingLang);
+      }
+      const existingOdoo = localStorage.getItem(OLD_STORAGE_PREFIX + 'odooConfig');
+      if (existingOdoo && !localStorage.getItem(STORAGE_PREFIX + 'odooConfig')) {
+        localStorage.setItem(STORAGE_PREFIX + 'odooConfig', existingOdoo);
+      }
+
+      // 2. Clear all demo/sample inventory, product, and transactional keys to empty arrays
+      const entityKeysToClear = [
+        'rawMaterials',
+        'products',
+        'boms',
+        'machines',
+        'suppliers',
+        'customers',
+        'receipts',
+        'landedCosts',
+        'issues',
+        'transfers',
+        'productionOrders',
+        'materialIssues',
+        'productionReceipts',
+        'customerDeliveries',
+        'costAdjustments',
+        'ledgerEntries',
+        'auditLogs'
+      ];
+
+      entityKeysToClear.forEach(key => {
+        localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify([]));
+        localStorage.removeItem(OLD_STORAGE_PREFIX + key);
+      });
+
+      // 3. Remove all remaining old v1 keys from localStorage
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(OLD_STORAGE_PREFIX)) {
+          localStorage.removeItem(k);
+        }
+      }
+
+      localStorage.setItem(migratedKey, 'true');
+    } catch (err) {
+      console.warn('Storage clean slate initialization note:', err);
+    }
+  }
+})();
 
 function loadStorage<T>(key: string, fallback: T): T {
   try {
@@ -212,6 +303,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [locations, setLocations] = useState<ProductionLocation[]>(() => loadStorage('locations', INITIAL_LOCATIONS));
   const [uoms, setUoms] = useState<UOM[]>(() => loadStorage('uoms', INITIAL_UOMS));
   const [currencies, setCurrencies] = useState<Currency[]>(() => loadStorage('currencies', INITIAL_CURRENCIES));
+  const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>(() => loadStorage('currencyRates', INITIAL_CURRENCY_RATES));
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(() => loadStorage('rawMaterials', INITIAL_RAW_MATERIALS));
   const [products, setProducts] = useState<Product[]>(() => loadStorage('products', INITIAL_PRODUCTS));
   const [machines, setMachines] = useState<Machine[]>(() => loadStorage('machines', INITIAL_MACHINES));
@@ -243,6 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { saveStorage('locations', locations); }, [locations]);
   useEffect(() => { saveStorage('uoms', uoms); }, [uoms]);
   useEffect(() => { saveStorage('currencies', currencies); }, [currencies]);
+  useEffect(() => { saveStorage('currencyRates', currencyRates); }, [currencyRates]);
   useEffect(() => { saveStorage('rawMaterials', rawMaterials); }, [rawMaterials]);
   useEffect(() => { saveStorage('products', products); }, [products]);
   useEffect(() => { saveStorage('machines', machines); }, [machines]);
@@ -1349,6 +1442,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (exists) return prev.map(c => c.id === currency.id ? currency : c);
       return [...prev, currency];
     });
+
+    if (!currency.isBase && currency.exchangeRate && currency.rateDate) {
+      saveCurrencyRate({
+        currencyCode: currency.code,
+        rateDate: currency.rateDate,
+        rate: currency.exchangeRate,
+        source: 'بطاقة العملة',
+        notes: `تحديث سعر صرف العملة ${currency.nameAr}`
+      });
+    }
+
     logAudit('SAVE_CURRENCY', 'العملات', currency.code, `حفظ العملة ${currency.nameAr}`);
   };
 
@@ -1356,6 +1460,166 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const item = currencies.find(c => c.id === id);
     setCurrencies(prev => prev.filter(c => c.id !== id));
     logAudit('DELETE_CURRENCY', 'العملات', item?.code || id, `حذف العملة ${item?.nameAr || id}`);
+  };
+
+  // Currency Exchange Rates History Management (By Date)
+  const saveCurrencyRate = (rateData: Omit<CurrencyRate, 'id' | 'createdAt'> & { id?: string }) => {
+    const code = (rateData.currencyCode || 'USD').trim().toUpperCase();
+    const date = rateData.rateDate || new Date().toISOString().split('T')[0];
+    const rateVal = Number(rateData.rate) || 1;
+    const rateId = rateData.id || `rate-${code.toLowerCase()}-${date}-${Date.now().toString(36)}`;
+
+    const newRate: CurrencyRate = {
+      id: rateId,
+      currencyCode: code,
+      rateDate: date,
+      rate: rateVal,
+      source: rateData.source || 'يدوي من لوحة التحكم',
+      notes: rateData.notes || '',
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser?.fullName || 'مدير النظام'
+    };
+
+    setCurrencyRates(prev => {
+      const idx = prev.findIndex(r => r.id === newRate.id || (r.currencyCode === code && r.rateDate === date));
+      let updated: CurrencyRate[];
+      if (idx >= 0) {
+        updated = [...prev];
+        updated[idx] = newRate;
+      } else {
+        updated = [newRate, ...prev];
+      }
+      return updated.sort((a, b) => b.rateDate.localeCompare(a.rateDate));
+    });
+
+    // Sync parent currency's exchangeRate if this rate is on or newer than currency's current rateDate
+    setCurrencies(prevCurrs => {
+      return prevCurrs.map(c => {
+        if (c.code === code && !c.isBase) {
+          if (!c.rateDate || date >= c.rateDate) {
+            return {
+              ...c,
+              exchangeRate: rateVal,
+              rateDate: date
+            };
+          }
+        }
+        return c;
+      });
+    });
+
+    logAudit(
+      'SAVE_CURRENCY_RATE',
+      'سعر الصرف اليومي',
+      code,
+      `تسجيل سعر صرف تاريخي: 1 ${code} = ${rateVal} ج.م لتاريخ ${date}`
+    );
+  };
+
+  const deleteCurrencyRate = (id: string) => {
+    const item = currencyRates.find(r => r.id === id);
+    if (!item) return;
+    setCurrencyRates(prev => prev.filter(r => r.id !== id));
+    logAudit(
+      'DELETE_CURRENCY_RATE',
+      'سعر الصرف اليومي',
+      item.currencyCode,
+      `حذف سعر صرف ${item.currencyCode} المسجل بتاريخ ${item.rateDate}`
+    );
+  };
+
+  const getExchangeRateForDate = (
+    currencyCode: string,
+    targetDate?: string
+  ): { rate: number; rateDate: string; isExact: boolean; source?: string } => {
+    const code = (currencyCode || 'EGP').trim().toUpperCase();
+    const date = targetDate || new Date().toISOString().split('T')[0];
+
+    if (code === 'EGP') {
+      return { rate: 1.0, rateDate: date, isExact: true, source: 'العملة الأساسية (EGP)' };
+    }
+
+    const matchingRates = currencyRates
+      .filter(r => r.currencyCode === code)
+      .sort((a, b) => b.rateDate.localeCompare(a.rateDate));
+
+    if (matchingRates.length === 0) {
+      const parentCurr = currencies.find(c => c.code === code);
+      return {
+        rate: parentCurr?.exchangeRate || 1.0,
+        rateDate: parentCurr?.rateDate || date,
+        isExact: false,
+        source: 'سعر البطاقة الافتراضي'
+      };
+    }
+
+    // Exact match for the given date
+    const exact = matchingRates.find(r => r.rateDate === date);
+    if (exact) {
+      return { rate: exact.rate, rateDate: exact.rateDate, isExact: true, source: exact.source };
+    }
+
+    // Closest rate on or before targetDate
+    const onOrBefore = matchingRates.find(r => r.rateDate <= date);
+    if (onOrBefore) {
+      return { rate: onOrBefore.rate, rateDate: onOrBefore.rateDate, isExact: false, source: onOrBefore.source };
+    }
+
+    // Closest available rate (e.g. earliest)
+    const fallback = matchingRates[0];
+    return { rate: fallback.rate, rateDate: fallback.rateDate, isExact: false, source: fallback.source };
+  };
+
+  // Clear seed data so the user starts completely from scratch with a clean slate
+  const clearSeedDataAndStartScratch = () => {
+    setReceipts([]);
+    setLandedCosts([]);
+    setIssues([]);
+    setTransfers([]);
+    setProductionOrders([]);
+    setMaterialIssues([]);
+    setProductionReceipts([]);
+    setCustomerDeliveries([]);
+    setCostAdjustments([]);
+    setLedgerEntries([]);
+    setAuditLogs([]);
+    setRawMaterials([]);
+    setProducts([]);
+    setBoms([]);
+    setMachines([]);
+    setSuppliers([]);
+    setCustomers([]);
+
+    const keys = [
+      'receipts', 'landedCosts', 'issues', 'transfers', 'productionOrders',
+      'materialIssues', 'productionReceipts', 'customerDeliveries', 'costAdjustments',
+      'ledgerEntries', 'auditLogs', 'rawMaterials', 'products', 'boms',
+      'machines', 'suppliers', 'customers'
+    ];
+    keys.forEach(k => {
+      try {
+        localStorage.setItem(STORAGE_PREFIX + k, JSON.stringify([]));
+      } catch (_) {}
+    });
+
+    try {
+      localStorage.setItem(STORAGE_PREFIX + 'cleared_seed_scratch', 'true');
+    } catch (_) {}
+
+    // Call backend reset to ensure PostgreSQL database tables are also cleared
+    try {
+      fetch('/api/data/reset-scratch', {
+        method: 'POST',
+        headers: authService.getAuthHeaders(),
+      }).catch(() => {});
+    } catch (_) {}
+
+    logAudit(
+      'SYSTEM_RESET',
+      currentUser?.fullName || 'مدير النظام',
+      'START_FROM_SCRATCH',
+      'تم مسح كافة البيانات وحركات المخزون والإنتاج للبدء من الصفر بقاعدة بيانات نظيفة'
+    );
   };
 
   const saveUser = (user: User) => {
@@ -1457,23 +1721,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.clear();
     setWarehouses(INITIAL_WAREHOUSES);
     setLocations(INITIAL_LOCATIONS);
-    setRawMaterials(INITIAL_RAW_MATERIALS);
-    setProducts(INITIAL_PRODUCTS);
-    setMachines(INITIAL_MACHINES);
-    setSuppliers(INITIAL_SUPPLIERS);
-    setCustomers(INITIAL_CUSTOMERS);
-    setBoms(INITIAL_BOMS);
-    setReceipts(INITIAL_RECEIPTS);
-    setLandedCosts(INITIAL_LANDED_COSTS);
+    setRawMaterials(SAMPLE_RAW_MATERIALS);
+    setProducts(SAMPLE_PRODUCTS);
+    setMachines(SAMPLE_MACHINES);
+    setSuppliers(SAMPLE_SUPPLIERS);
+    setCustomers(SAMPLE_CUSTOMERS);
+    setBoms(SAMPLE_BOMS);
+    setReceipts(SAMPLE_RECEIPTS);
+    setLandedCosts(SAMPLE_LANDED_COSTS);
     setIssues([]);
-    setTransfers(INITIAL_TRANSFERS);
-    setProductionOrders(INITIAL_PRODUCTION_ORDERS);
-    setMaterialIssues(INITIAL_MATERIAL_ISSUES);
-    setProductionReceipts(INITIAL_PRODUCTION_RECEIPTS);
-    setCustomerDeliveries(INITIAL_CUSTOMER_DELIVERIES);
-    setCostAdjustments(INITIAL_COST_ADJUSTMENTS);
-    setLedgerEntries(INITIAL_LEDGER_ENTRIES);
-    setAuditLogs(INITIAL_AUDIT_LOGS);
+    setTransfers(SAMPLE_TRANSFERS);
+    setProductionOrders(SAMPLE_PRODUCTION_ORDERS);
+    setMaterialIssues(SAMPLE_MATERIAL_ISSUES);
+    setProductionReceipts(SAMPLE_PRODUCTION_RECEIPTS);
+    setCustomerDeliveries(SAMPLE_CUSTOMER_DELIVERIES);
+    setCostAdjustments(SAMPLE_COST_ADJUSTMENTS);
+    setLedgerEntries(SAMPLE_LEDGER_ENTRIES);
+    setAuditLogs(SAMPLE_AUDIT_LOGS);
     setOdooConfig(INITIAL_ODOO_CONFIG);
     setOdooLogs(INITIAL_ODOO_LOGS);
     logAudit('RESET_SYSTEM', 'النظام', 'RESET', 'تمت إعادة ضبط النظام إلى دورة العمل المعيارية النموذجية');
@@ -1525,6 +1789,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         locations,
         uoms,
         currencies,
+        currencyRates,
+        saveCurrencyRate,
+        deleteCurrencyRate,
+        getExchangeRateForDate,
+        clearSeedDataAndStartScratch,
         rawMaterials,
         products,
         machines,

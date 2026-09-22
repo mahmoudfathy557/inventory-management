@@ -146,6 +146,17 @@ export interface Currency {
   active: boolean;
 }
 
+export interface CurrencyRate {
+  id: string;
+  currencyCode: string; // e.g. USD, EUR, SAR, GBP
+  rateDate: string; // YYYY-MM-DD
+  rate: number; // Against base currency (e.g. 50.45 EGP)
+  source?: string; // e.g. "البنك المركزي", "سعر مخصص", "الفاتورة"
+  notes?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
 export interface RawMaterial {
   id: string;
   code: string;

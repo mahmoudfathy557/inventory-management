@@ -15,7 +15,8 @@ import {
   Trash2,
   MapPin,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -45,6 +46,8 @@ import { PartnerModal } from '../components/master-data/PartnerModal';
 import { UOMModal } from '../components/master-data/UOMModal';
 import { CurrencyModal } from '../components/master-data/CurrencyModal';
 import { UserModal } from '../components/master-data/UserModal';
+import { CurrencyRatesManager } from '../components/master-data/CurrencyRatesManager';
+import { ClearSeedDataModal } from '../components/common/ClearSeedDataModal';
 import { MasterDataSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 
@@ -126,6 +129,8 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
 
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | null>(null);
+  const [currencySubTab, setCurrencySubTab] = useState<'RATES_BY_DATE' | 'CURRENCIES'>('RATES_BY_DATE');
+  const [isClearSeedModalOpen, setIsClearSeedModalOpen] = useState(false);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -164,8 +169,16 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
           </p>
         </div>
 
-        {/* Dynamic Add Action Button */}
-        <div>
+        {/* Dynamic Add Action Button & Clear Seed Action */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsClearSeedModalOpen(true)}
+            className="px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+            title={isAr ? 'مسح بيانات البذر والبدء من الصفر' : 'Clear seed data & start scratch'}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>{isAr ? 'مسح البيانات والبدء من الصفر' : 'Clear & Start Scratch'}</span>
+          </button>
           {activeSubTab === 'raw' && (
             <button
               onClick={() => { setSelectedRaw(null); setIsRawModalOpen(true); }}
@@ -1065,66 +1078,117 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
         </div>
       )}
 
-      {/* SUB-VIEW 8: CURRENCIES */}
+      {/* SUB-VIEW 8: CURRENCIES & RATES BY DATE */}
       {activeSubTab === 'currencies' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {currencies
-            .filter(c =>
-              c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              c.nameAr.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            .map(c => (
-              <div
-                key={c.id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md transition space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
-                      {c.code}
-                    </span>
-                    {c.isBase && (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
-                        {isAr ? 'أساسية' : 'Base'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => { setSelectedCurrency(c); setIsCurrencyModalOpen(true); }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
-                      title={isAr ? 'تعديل' : 'Edit'}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
+        <div className="space-y-4">
+          {/* Sub-navigation tabs for currencies */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <button
+              onClick={() => setCurrencySubTab('RATES_BY_DATE')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                currencySubTab === 'RATES_BY_DATE'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{isAr ? 'أسعار الصرف بالتواريخ (تكوين يدوي)' : 'Rates by Date Configuration'}</span>
+            </button>
+
+            <button
+              onClick={() => setCurrencySubTab('CURRENCIES')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                currencySubTab === 'CURRENCIES'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>{isAr ? 'بطاقات العملات المعرفة' : 'Currencies Master List'}</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10">
+                {currencies.length}
+              </span>
+            </button>
+          </div>
+
+          {currencySubTab === 'RATES_BY_DATE' ? (
+            <CurrencyRatesManager
+              onOpenCurrencyModal={() => {
+                setSelectedCurrency(null);
+                setIsCurrencyModalOpen(true);
+              }}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {currencies
+                .filter(c =>
+                  c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.nameAr.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map(c => (
+                  <div
+                    key={c.id}
+                    className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-md transition space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                          {c.code}
+                        </span>
+                        {c.isBase && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                            {isAr ? 'أساسية' : 'Base'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setSelectedCurrency(c); setIsCurrencyModalOpen(true); }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                          title={isAr ? 'تعديل' : 'Edit'}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {!c.isBase && (
+                          <button
+                            onClick={() => triggerDelete(
+                              isAr ? 'حذف العملة' : 'Delete Currency',
+                              isAr ? 'هل أنت متأكد من حذف هذه العملة؟' : 'Are you sure you want to delete this currency?',
+                              `${c.code} - ${c.nameAr}`,
+                              () => deleteCurrency(c.id)
+                            )}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                            title={isAr ? 'حذف' : 'Delete'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{c.nameAr}</h3>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">{c.nameEn}</p>
+                    </div>
+
+                    <div className="p-2.5 bg-emerald-50/40 rounded-xl border border-emerald-200/60 text-xs font-mono flex justify-between items-center">
+                      <span className="text-slate-500 font-sans">{isAr ? 'سعر الصرف مقابل EGP:' : 'Rate to EGP:'}</span>
+                      <span className="font-bold text-emerald-800 text-sm">{c.exchangeRate} EGP</span>
+                    </div>
+
                     {!c.isBase && (
                       <button
-                        onClick={() => triggerDelete(
-                          isAr ? 'حذف العملة' : 'Delete Currency',
-                          isAr ? 'هل أنت متأكد من حذف هذه العملة؟' : 'Are you sure you want to delete this currency?',
-                          `${c.code} - ${c.nameAr}`,
-                          () => deleteCurrency(c.id)
-                        )}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                        title={isAr ? 'حذف' : 'Delete'}
+                        onClick={() => setCurrencySubTab('RATES_BY_DATE')}
+                        className="w-full py-1.5 text-center text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{isAr ? 'عرض وضبط الأسعار بالتواريخ' : 'Configure Rates by Date'}</span>
                       </button>
                     )}
                   </div>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">{c.nameAr}</h3>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">{c.nameEn}</p>
-                </div>
-
-                <div className="p-2.5 bg-emerald-50/40 rounded-xl border border-emerald-200/60 text-xs font-mono flex justify-between items-center">
-                  <span className="text-slate-500 font-sans">{isAr ? 'سعر الصرف مقابل EGP:' : 'Rate to EGP:'}</span>
-                  <span className="font-bold text-emerald-800 text-sm">{c.exchangeRate} EGP</span>
-                </div>
-              </div>
-            ))}
+                ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1249,7 +1313,10 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
         onClose={() => { setIsUserModalOpen(false); setSelectedUser(null); }}
       />
 
-
+      <ClearSeedDataModal
+        isOpen={isClearSeedModalOpen}
+        onClose={() => setIsClearSeedModalOpen(false)}
+      />
     </div>
   );
 };
