@@ -36,6 +36,7 @@ interface DataTableProps<T> {
   defaultSortOrder?: 'asc' | 'desc';
   pageSize?: number;
   isLoading?: boolean;
+  rowClassName?: (item: T) => string;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -52,7 +53,8 @@ export function DataTable<T extends Record<string, any>>({
   defaultSortKey,
   defaultSortOrder = 'desc',
   pageSize = 10,
-  isLoading = false
+  isLoading = false,
+  rowClassName
 }: DataTableProps<T>) {
   const { language } = useApp();
   const isAr = language === 'ar';
@@ -250,7 +252,10 @@ export function DataTable<T extends Record<string, any>>({
               </tr>
             ) : (
               paginatedData.map(item => (
-                <tr key={keyExtractor(item)} className="hover:bg-blue-50/30 transition-colors">
+                <tr
+                  key={keyExtractor(item)}
+                  className={`hover:bg-blue-50/30 transition-colors ${rowClassName ? rowClassName(item) : ''}`}
+                >
                   {columns.map(col => (
                     <td
                       key={col.key}

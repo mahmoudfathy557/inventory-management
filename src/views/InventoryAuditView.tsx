@@ -65,7 +65,11 @@ export const InventoryAuditView: React.FC = () => {
     landedCosts,
     receipts,
     costAdjustments,
-    auditLogs
+    auditLogs,
+    issues,
+    transfers,
+    materialIssues,
+    customerDeliveries
   } = useApp();
   const isAr = language === 'ar';
 
@@ -90,6 +94,21 @@ export const InventoryAuditView: React.FC = () => {
   }, [activeTab]);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showCanceled, setShowCanceled] = useState(false);
+
+  // Collect all cancelled document numbers
+  const cancelledDocNums = React.useMemo(() => {
+    const set = new Set<string>();
+    (receipts || []).forEach(r => { if (r.status === 'CANCELLED') set.add(r.receiptNumber); });
+    (landedCosts || []).forEach(lc => { if (lc.status === 'CANCELLED') set.add(lc.landedCostNumber); });
+    (issues || []).forEach(i => { if (i.status === 'CANCELLED') set.add(i.issueNumber); });
+    (transfers || []).forEach(t => { if (t.status === 'CANCELLED') set.add(t.transferNumber); });
+    (productionOrders || []).forEach(po => { if ((po.status as string) === 'CANCELLED') set.add(po.orderNumber); });
+    (materialIssues || []).forEach(mi => { if (mi.status === 'CANCELLED') set.add(mi.issueNumber); });
+    (productionReceipts || []).forEach(pr => { if (pr.status === 'CANCELLED') set.add(pr.receiptNumber); });
+    (customerDeliveries || []).forEach(d => { if (d.status === 'CANCELLED') set.add(d.deliveryNumber); });
+    return set;
+  }, [receipts, landedCosts, issues, transfers, productionOrders, materialIssues, productionReceipts, customerDeliveries]);
 
   // Ledger Filter states
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('ALL');
@@ -98,6 +117,10 @@ export const InventoryAuditView: React.FC = () => {
 
   // Filter entries for ledger
   const filteredEntries = ledgerEntries.filter(entry => {
+    const isCancelled = cancelledDocNums.has(entry.documentNumber);
+    if (!showCanceled && isCancelled) {
+      return false;
+    }
     if (selectedWarehouseId !== 'ALL' && entry.warehouseId !== selectedWarehouseId) {
       return false;
     }
@@ -667,6 +690,24 @@ export const InventoryAuditView: React.FC = () => {
         </span>
       ),
       exportValue: e => e.runningInventoryValueEGP
+    },
+    {
+      key: 'status',
+      headerAr: 'الحالة',
+      headerEn: 'Status',
+      render: e => {
+        const isCancelled = cancelledDocNums.has(e.documentNumber);
+        return isCancelled ? (
+          <span className="font-semibold text-[10px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shadow-2xs whitespace-nowrap">
+            {isAr ? 'ملغى' : 'CANCELED'}
+          </span>
+        ) : (
+          <span className="font-semibold text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-2xs whitespace-nowrap">
+            {isAr ? 'نشط' : 'Active'}
+          </span>
+        );
+      },
+      exportValue: e => cancelledDocNums.has(e.documentNumber) ? 'CANCELED' : 'Active'
     }
   ];
 
@@ -868,7 +909,7 @@ export const InventoryAuditView: React.FC = () => {
       {activeTab === 'ledger' && (
         <div className="space-y-4">
           {/* Controls Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-4 rounded-xl border border-slate-200 text-xs no-print">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200 text-xs no-print">
             <div>
               <label className="block text-slate-600 font-semibold mb-1">
                 {isAr ? 'تصفية حسب المستودع / الصالة:' : 'Filter by Warehouse:'}
@@ -929,6 +970,21 @@ export const InventoryAuditView: React.FC = () => {
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3" />
               </div>
             </div>
+
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">
+                {isAr ? 'العمليات المُلغاة:' : 'Canceled Documents:'}
+              </label>
+              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition h-[36px]">
+                <input
+                  type="checkbox"
+                  checked={showCanceled}
+                  onChange={e => setShowCanceled(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <span className="font-semibold text-slate-700">{isAr ? 'إظهار المستندات الملغاة' : 'Show Canceled Docs'}</span>
+              </label>
+            </div>
           </div>
 
           {/* Real-time Audit Ledger Reconciliation Bar */}
@@ -963,6 +1019,7 @@ export const InventoryAuditView: React.FC = () => {
             titleAr="دفتر أستاذ المخزون التفصيلي"
             titleEn="Item Inventory Ledger"
             exportFileName="Inventory_Ledger"
+            rowClassName={e => cancelledDocNums.has(e.documentNumber) ? 'bg-rose-50/20 text-slate-400 opacity-75 line-through decoration-slate-300' : ''}
           />
         </div>
       )}

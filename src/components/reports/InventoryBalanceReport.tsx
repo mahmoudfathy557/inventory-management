@@ -47,7 +47,15 @@ export const InventoryBalanceReport: React.FC = () => {
     products,
     warehouses,
     ledgerEntries,
-    getItemWarehouseValuation
+    getItemWarehouseValuation,
+    receipts,
+    landedCosts,
+    issues,
+    transfers,
+    productionOrders,
+    materialIssues,
+    productionReceipts,
+    customerDeliveries
   } = useApp();
   const isAr = language === 'ar';
 
@@ -56,6 +64,20 @@ export const InventoryBalanceReport: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [drillDownItem, setDrillDownItem] = useState<{ id: string; name: string; code: string } | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
+  const [showCanceled, setShowCanceled] = useState<boolean>(false);
+
+  const cancelledDocNums = useMemo(() => {
+    const set = new Set<string>();
+    (receipts || []).forEach(r => { if (r.status === 'CANCELLED') set.add(r.receiptNumber); });
+    (landedCosts || []).forEach(lc => { if (lc.status === 'CANCELLED') set.add(lc.landedCostNumber); });
+    (issues || []).forEach(i => { if (i.status === 'CANCELLED') set.add(i.issueNumber); });
+    (transfers || []).forEach(t => { if (t.status === 'CANCELLED') set.add(t.transferNumber); });
+    (productionOrders || []).forEach(po => { if ((po.status as string) === 'CANCELLED') set.add(po.orderNumber); });
+    (materialIssues || []).forEach(mi => { if (mi.status === 'CANCELLED') set.add(mi.issueNumber); });
+    (productionReceipts || []).forEach(pr => { if (pr.status === 'CANCELLED') set.add(pr.receiptNumber); });
+    (customerDeliveries || []).forEach(d => { if (d.status === 'CANCELLED') set.add(d.deliveryNumber); });
+    return set;
+  }, [receipts, landedCosts, issues, transfers, productionOrders, materialIssues, productionReceipts, customerDeliveries]);
 
   // Compute balance rows for each item and warehouse combination
   const balanceRows: InventoryBalanceRow[] = useMemo(() => {
@@ -235,42 +257,74 @@ export const InventoryBalanceReport: React.FC = () => {
   // Drilldown entries for selected item
   const drillDownEntries = useMemo(() => {
     if (!drillDownItem) return [];
-    const entries = ledgerEntries.filter(e => e.itemId === drillDownItem.id);
+    
+    // Sort chronological first!
+    const itemEntries = [...ledgerEntries]
+      .filter(e => e.itemId === drillDownItem.id)
+      .sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
 
     // Track running balance and value defensively to protect against zeroed values
     let runningQty = 0;
     let runningVal = 0;
+    let runningMAC = 0;
 
-    return entries.map(entry => {
-      const isLandedCost = entry.transactionType === TransactionType.LANDED_COST;
+    const computed = itemEntries.map(entry => {
+      const isCancelled = cancelledDocNums.has(entry.documentNumber);
+      
+      let balanceQty = runningQty;
+      let runningInventoryVal = runningVal;
+      let mac = runningMAC;
 
-      let balanceQty = entry.balanceQty;
-      let runningInventoryVal = entry.runningInventoryValueEGP;
-      let mac = entry.movingAverageCostEGP;
+      if (!isCancelled) {
+        // If it's a valid transaction, calculate its effect
+        const isLandedCost = entry.transactionType === TransactionType.LANDED_COST;
+        const isCostAdj = entry.transactionType === TransactionType.COST_ADJUSTMENT;
 
-      if (isLandedCost) {
-        if ((!balanceQty || balanceQty === 0) && runningQty > 0) {
-          balanceQty = runningQty;
+        if (isLandedCost || isCostAdj) {
+          const addedVal = entry.transactionValueEGP || 0;
+          runningVal += addedVal;
+          if (runningQty > 0) {
+            runningMAC = runningVal / runningQty;
+          }
+        } else {
+          if (entry.qtyIn > 0) {
+            const inVal = entry.transactionValueEGP || (entry.qtyIn * entry.unitCostEGP);
+            runningQty += entry.qtyIn;
+            runningVal += inVal;
+            runningMAC = runningQty > 0 ? (runningVal / runningQty) : 0;
+          }
+          if (entry.qtyOut > 0) {
+            const outVal = entry.transactionValueEGP || (entry.qtyOut * runningMAC);
+            runningQty = Math.max(0, runningQty - entry.qtyOut);
+            runningVal = Math.max(0, runningVal - outVal);
+            if (runningQty === 0) {
+              runningVal = 0;
+              runningMAC = 0;
+            }
+          }
         }
-        if ((!runningInventoryVal || runningInventoryVal === 0) && (entry.transactionValueEGP > 0 || runningVal > 0)) {
-          runningInventoryVal = runningVal + (entry.transactionValueEGP || 0);
-        }
-        if ((!mac || mac === 0) && balanceQty > 0 && runningInventoryVal > 0) {
-          mac = runningInventoryVal / balanceQty;
-        }
+        
+        balanceQty = runningQty;
+        runningInventoryVal = runningVal;
+        mac = runningMAC;
       }
-
-      if (balanceQty > 0) runningQty = balanceQty;
-      if (runningInventoryVal > 0) runningVal = runningInventoryVal;
 
       return {
         ...entry,
+        isCancelled,
         balanceQty,
         runningInventoryValueEGP: runningInventoryVal,
         movingAverageCostEGP: mac
       };
     });
-  }, [drillDownItem, ledgerEntries]);
+
+    // Filter based on whether we should show canceled documents
+    if (showCanceled) {
+      return computed;
+    } else {
+      return computed.filter(e => !e.isCancelled);
+    }
+  }, [drillDownItem, ledgerEntries, cancelledDocNums, showCanceled]);
 
   return (
     <div className="space-y-4">
@@ -451,20 +505,23 @@ export const InventoryBalanceReport: React.FC = () => {
       {drillDownItem && (() => {
         const itemRow = filteredRows.find(r => r.itemId === drillDownItem.id);
         const itemUom = itemRow?.uom || 'KG';
-        const totalLandedCostAllocated = drillDownEntries
+        
+        // Always calculate the KPIs based on non-cancelled (active) entries!
+        const activeEntries = drillDownEntries.filter(e => !e.isCancelled);
+        const totalLandedCostAllocated = activeEntries
           .filter(e => e.transactionType === TransactionType.LANDED_COST)
           .reduce((sum, e) => sum + (e.transactionValueEGP || 0), 0);
-        const lastEntry = drillDownEntries.length > 0 ? drillDownEntries[drillDownEntries.length - 1] : null;
-        const currentBalance = lastEntry ? lastEntry.balanceQty : (itemRow?.closingQty || 0);
-        const currentMAC = lastEntry ? lastEntry.movingAverageCostEGP : (itemRow?.movingAverageCost || 0);
-        const currentValuation = lastEntry ? lastEntry.runningInventoryValueEGP : (itemRow?.closingValue || 0);
+        const lastActiveEntry = activeEntries.length > 0 ? activeEntries[activeEntries.length - 1] : null;
+        const currentBalance = lastActiveEntry ? lastActiveEntry.balanceQty : (itemRow?.closingQty || 0);
+        const currentMAC = lastActiveEntry ? lastActiveEntry.movingAverageCostEGP : (itemRow?.movingAverageCost || 0);
+        const currentValuation = lastActiveEntry ? lastActiveEntry.runningInventoryValueEGP : (itemRow?.closingValue || 0);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
             <div className="bg-white rounded-2xl max-w-5xl w-full p-5 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150">
               {/* Modal Header */}
               <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-                <div className="space-y-1">
+                <div className="space-y-1 flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="text-sm font-bold text-slate-900">
                       {isAr ? 'تفاصيل حركات الصنف وسجل التكلفة (Transaction History)' : 'Item Transaction & Costing History'}
@@ -481,6 +538,20 @@ export const InventoryBalanceReport: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Show Canceled Toggle */}
+                <div className="flex items-center gap-2 mx-4 no-print">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-100 transition shadow-2xs">
+                    <input
+                      type="checkbox"
+                      checked={showCanceled}
+                      onChange={(e) => setShowCanceled(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    />
+                    <span>{isAr ? 'إظهار العمليات المُلغاة' : 'Show Canceled Transactions'}</span>
+                  </label>
+                </div>
+
                 <button
                   onClick={() => setDrillDownItem(null)}
                   className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
@@ -533,6 +604,7 @@ export const InventoryBalanceReport: React.FC = () => {
                       <th className="p-2.5 text-center font-bold text-purple-800 bg-purple-50/50">{isAr ? 'قيمة الحركة' : 'Txn Value'}</th>
                       <th className="p-2.5 font-bold text-blue-900">{isAr ? 'متوسط التكلفة' : 'MAC'}</th>
                       <th className="p-2.5 font-bold text-emerald-800">{isAr ? 'القيمة التراكمية' : 'Running Value'}</th>
+                      <th className="p-2.5 text-center">{isAr ? 'الحالة' : 'Status'}</th>
                       <th className="p-2.5">{isAr ? 'المستخدم' : 'User'}</th>
                     </tr>
                   </thead>
@@ -541,9 +613,19 @@ export const InventoryBalanceReport: React.FC = () => {
                       const isLandedCost = e.transactionType === TransactionType.LANDED_COST;
                       const isPurchaseReceipt = e.transactionType === TransactionType.PURCHASE_RECEIPT;
                       const isOutMovement = e.qtyOut > 0;
+                      const isCancelled = e.isCancelled;
 
                       return (
-                        <tr key={idx} className={`hover:bg-slate-50 transition-colors ${isLandedCost ? 'bg-purple-50/20' : ''}`}>
+                        <tr
+                          key={idx}
+                          className={`hover:bg-slate-50 transition-colors ${
+                            isCancelled
+                              ? 'bg-rose-50/20 text-slate-400 opacity-70 line-through decoration-slate-300'
+                              : isLandedCost
+                              ? 'bg-purple-50/20'
+                              : ''
+                          }`}
+                        >
                           <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">{e.date}</td>
                           <td className="p-2.5 font-mono font-bold text-blue-600 whitespace-nowrap">
                             {e.documentNumber}
@@ -574,7 +656,7 @@ export const InventoryBalanceReport: React.FC = () => {
                                 {isAr ? '0 (تكلفة فقط)' : '0 (Cost Only)'}
                               </span>
                             ) : e.qtyIn > 0 ? (
-                              <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                              <span className={`font-bold ${isCancelled ? 'text-slate-400' : 'text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded'}`}>
                                 +{formatNumber(e.qtyIn, language)}
                               </span>
                             ) : (
@@ -585,7 +667,7 @@ export const InventoryBalanceReport: React.FC = () => {
                           {/* Out Column */}
                           <td className="p-2.5 text-center font-mono whitespace-nowrap">
                             {e.qtyOut > 0 ? (
-                              <span className="font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">
+                              <span className={`font-bold ${isCancelled ? 'text-slate-400' : 'text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded'}`}>
                                 -{formatNumber(e.qtyOut, language)}
                               </span>
                             ) : (
@@ -595,14 +677,16 @@ export const InventoryBalanceReport: React.FC = () => {
 
                           {/* Balance Qty Column */}
                           <td className="p-2.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap">
-                            <span className="bg-slate-100 px-2 py-0.5 rounded">
+                            <span className={`${isCancelled ? 'text-slate-400 font-normal' : 'bg-slate-100 px-2 py-0.5 rounded'}`}>
                               {formatNumber(e.balanceQty, language)} {e.uom || itemUom}
                             </span>
                           </td>
 
-                          {/* Transaction Value Column (Explicitly requested by user) */}
+                          {/* Transaction Value Column */}
                           <td className="p-2.5 text-center font-mono whitespace-nowrap">
-                            {isLandedCost ? (
+                            {isCancelled ? (
+                              <span className="text-slate-400 font-normal">—</span>
+                            ) : isLandedCost ? (
                               <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 shadow-2xs">
                                 +{formatCurrency(e.transactionValueEGP, language)}
                               </span>
@@ -625,14 +709,35 @@ export const InventoryBalanceReport: React.FC = () => {
 
                           {/* Moving Average Cost (MAC) */}
                           <td className="p-2.5 font-mono font-semibold text-blue-950 whitespace-nowrap">
-                            {formatCurrency(e.movingAverageCostEGP, language)}
+                            {isCancelled ? (
+                              <span className="text-slate-400 font-normal">—</span>
+                            ) : (
+                              formatCurrency(e.movingAverageCostEGP, language)
+                            )}
                           </td>
 
                           {/* Running Inventory Value */}
                           <td className="p-2.5 font-mono font-bold text-emerald-800 whitespace-nowrap">
-                            <span className="bg-emerald-50/80 px-2 py-0.5 rounded border border-emerald-100">
-                              {formatCurrency(e.runningInventoryValueEGP, language)}
-                            </span>
+                            {isCancelled ? (
+                              <span className="text-slate-400 font-normal">—</span>
+                            ) : (
+                              <span className="bg-emerald-50/80 px-2 py-0.5 rounded border border-emerald-100">
+                                {formatCurrency(e.runningInventoryValueEGP, language)}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="p-2.5 text-center whitespace-nowrap">
+                            {isCancelled ? (
+                              <span className="font-semibold text-[10px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shadow-2xs">
+                                {isAr ? 'ملغى' : 'CANCELED'}
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-2xs">
+                                {isAr ? 'نشط' : 'Active'}
+                              </span>
+                            )}
                           </td>
 
                           {/* Created By User */}
@@ -642,7 +747,7 @@ export const InventoryBalanceReport: React.FC = () => {
                     })}
                     {drillDownEntries.length === 0 && (
                       <tr>
-                        <td colSpan={11} className="p-8 text-center text-slate-400">
+                        <td colSpan={12} className="p-8 text-center text-slate-400">
                           {isAr ? 'لا توجد حركات مسجلة لهذا الصنف' : 'No recorded movements for this item'}
                         </td>
                       </tr>

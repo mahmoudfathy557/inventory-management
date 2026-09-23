@@ -380,14 +380,27 @@ function healLedgerEntries(
 export function computeItemWarehouseStockMap(
   item: RawMaterial | Product,
   entries: InventoryLedgerEntry[],
-  defaultWhId?: string
+  defaultWhId?: string,
+  cancelledDocNums?: Set<string>
 ): Record<string, ItemWarehouseStock> {
-  const itemEntries = (entries || []).filter(e => e.itemId === item.id);
+  let itemEntries = (entries || []).filter(e => e.itemId === item.id);
+  if (cancelledDocNums) {
+    itemEntries = itemEntries.filter(e => !cancelledDocNums.has(e.documentNumber));
+  }
   const whMap: Record<string, ItemWarehouseStock> = {};
   const fallbackWh = defaultWhId || item.defaultWarehouseId || 'wh-raw';
 
   // If no ledger entries exist yet, use item's initial state
   if (itemEntries.length === 0) {
+    if (cancelledDocNums && cancelledDocNums.size > 0) {
+      whMap[fallbackWh] = {
+        warehouseId: fallbackWh,
+        currentQty: 0,
+        movingAverageCost: 0,
+        totalValue: 0
+      };
+      return whMap;
+    }
     if (item.warehouseStock && Object.keys(item.warehouseStock).length > 0) {
       return item.warehouseStock;
     }
@@ -601,6 +614,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { saveStorage('auditLogs', auditLogs); }, [auditLogs]);
   useEffect(() => { saveStorage('odooConfig', odooConfig); }, [odooConfig]);
   useEffect(() => { saveStorage('odooLogs', odooLogs); }, [odooLogs]);
+
+  // Dynamically compute/update raw materials and products when ledger entries or statuses change!
+  useEffect(() => {
+    const cancelledDocNums = new Set<string>();
+    receipts.forEach(r => { if (r.status === 'CANCELLED') cancelledDocNums.add(r.receiptNumber); });
+    landedCosts.forEach(lc => { if (lc.status === 'CANCELLED') cancelledDocNums.add(lc.landedCostNumber); });
+    issues.forEach(i => { if (i.status === 'CANCELLED') cancelledDocNums.add(i.issueNumber); });
+    transfers.forEach(t => { if (t.status === 'CANCELLED') cancelledDocNums.add(t.transferNumber); });
+    productionOrders.forEach(po => { if ((po.status as string) === 'CANCELLED') cancelledDocNums.add(po.orderNumber); });
+    materialIssues.forEach(mi => { if (mi.status === 'CANCELLED') cancelledDocNums.add(mi.issueNumber); });
+    productionReceipts.forEach(pr => { if (pr.status === 'CANCELLED') cancelledDocNums.add(pr.receiptNumber); });
+    customerDeliveries.forEach(d => { if (d.status === 'CANCELLED') cancelledDocNums.add(d.deliveryNumber); });
+
+    setRawMaterials(prev => {
+      let changed = false;
+      const updated = prev.map(item => {
+        const filteredLedger = ledgerEntries.filter(e => !cancelledDocNums.has(e.documentNumber));
+        const whMap = computeItemWarehouseStockMap(item, filteredLedger, item.defaultWarehouseId, cancelledDocNums);
+        const hasEntries = filteredLedger.some(e => e.itemId === item.id);
+        
+        let totalQty = 0;
+        let totalVal = 0;
+        let mac = item.movingAverageCost;
+        if (hasEntries) {
+          totalQty = Object.values(whMap).reduce((s, w) => s + w.currentQty, 0);
+          totalVal = Object.values(whMap).reduce((s, w) => s + w.totalValue, 0);
+          mac = totalQty > 0 ? totalVal / totalQty : item.movingAverageCost;
+        }
+
+        if (
+          item.currentQty !== totalQty ||
+          item.totalValue !== totalVal ||
+          item.movingAverageCost !== mac ||
+          JSON.stringify(item.warehouseStock) !== JSON.stringify(whMap)
+        ) {
+          changed = true;
+          return {
+            ...item,
+            currentQty: totalQty,
+            totalValue: totalVal,
+            movingAverageCost: mac,
+            warehouseStock: whMap
+          };
+        }
+        return item;
+      });
+      return changed ? updated : prev;
+    });
+
+    setProducts(prev => {
+      let changed = false;
+      const updated = prev.map(item => {
+        const filteredLedger = ledgerEntries.filter(e => !cancelledDocNums.has(e.documentNumber));
+        const whMap = computeItemWarehouseStockMap(item, filteredLedger, item.defaultWarehouseId, cancelledDocNums);
+        const hasEntries = filteredLedger.some(e => e.itemId === item.id);
+        
+        let totalQty = 0;
+        let totalVal = 0;
+        let mac = item.movingAverageCost;
+        if (hasEntries) {
+          totalQty = Object.values(whMap).reduce((s, w) => s + w.currentQty, 0);
+          totalVal = Object.values(whMap).reduce((s, w) => s + w.totalValue, 0);
+          mac = totalQty > 0 ? totalVal / totalQty : item.movingAverageCost;
+        }
+
+        if (
+          item.currentQty !== totalQty ||
+          item.totalValue !== totalVal ||
+          item.movingAverageCost !== mac ||
+          JSON.stringify(item.warehouseStock) !== JSON.stringify(whMap)
+        ) {
+          changed = true;
+          return {
+            ...item,
+            currentQty: totalQty,
+            totalValue: totalVal,
+            movingAverageCost: mac,
+            warehouseStock: whMap
+          };
+        }
+        return item;
+      });
+      return changed ? updated : prev;
+    });
+  }, [ledgerEntries, receipts, landedCosts, issues, transfers, productionOrders, materialIssues, productionReceipts, customerDeliveries]);
 
   // Sync to PostgreSQL backend via Drizzle API
   useEffect(() => {
