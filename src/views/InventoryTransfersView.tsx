@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ArrowRightLeft,
   Plus,
@@ -25,6 +25,7 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryTransfer } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
+import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 
 export const InventoryTransfersView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -43,6 +44,58 @@ export const InventoryTransfersView: React.FC = () => {
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
+
+  const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+
+  const filteredTransfers = useMemo(() => {
+    return (transfers || []).filter(t => {
+      // 1. Date filters
+      if (erpFilters.dateFrom && t.createdDate < erpFilters.dateFrom) return false;
+      if (erpFilters.dateTo && t.createdDate > erpFilters.dateTo) return false;
+
+      // 2. Warehouse Type & ID (for Transfers, match source OR destination warehouse)
+      if (erpFilters.warehouseType || erpFilters.warehouseId) {
+        const fromWh = warehouses.find(w => w.id === t.fromWarehouseId);
+        const toWh = warehouses.find(w => w.id === t.toWarehouseId);
+        
+        if (erpFilters.warehouseType) {
+          const matchType = fromWh?.type === erpFilters.warehouseType || toWh?.type === erpFilters.warehouseType;
+          if (!matchType) return false;
+        }
+        if (erpFilters.warehouseId) {
+          const matchWh = t.fromWarehouseId === erpFilters.warehouseId || t.toWarehouseId === erpFilters.warehouseId;
+          if (!matchWh) return false;
+        }
+      }
+
+      // 3. Item criteria
+      if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
+        const item = rawMaterials.find(m => m.id === t.itemId) || products.find(p => p.id === t.itemId);
+        if (!item) return false;
+        
+        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
+        if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
+        const itemNameStr = isAr ? item.nameAr : item.nameEn;
+        if (erpFilters.itemDesc && !itemNameStr.toLowerCase().includes(erpFilters.itemDesc.toLowerCase())) return false;
+      }
+
+      // 4. Document properties
+      if (erpFilters.docNum && !t.transferNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
+      if (erpFilters.createdBy && t.createdBy !== erpFilters.createdBy) return false;
+
+      // 5. Status filter
+      if (erpFilters.status) {
+        if (t.status !== erpFilters.status) return false;
+      } else {
+        // By default, do not show cancelled transactions in active operational view
+        if (t.status === 'CANCELLED') return false;
+      }
+
+      return true;
+    });
+  }, [transfers, erpFilters, warehouses, rawMaterials, products, isAr]);
+
   const { pendingCount, isOnline, triggerSync, isSyncing } = useOfflineSyncQueue(odooConfig);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -344,9 +397,29 @@ export const InventoryTransfersView: React.FC = () => {
         </div>
       )}
 
+      {/* ERP Smart Filter Bar */}
+      <SmartFilterBar
+        filters={erpFilters}
+        onChange={setErpFilters}
+        config={{
+          date: true,
+          warehouseType: true,
+          warehouse: true,
+          itemType: true,
+          itemGroup: true,
+          itemCode: true,
+          itemDesc: true,
+          status: true,
+          docNum: true,
+          createdBy: true
+        }}
+        totalRecordsCount={transfers.length}
+        filteredRecordsCount={filteredTransfers.length}
+      />
+
       <DataTable
         id="transfers-table"
-        data={transfers}
+        data={filteredTransfers}
         columns={columns}
         keyExtractor={t => t.id}
         searchFields={['transferNumber', 'itemName', 'reference']}

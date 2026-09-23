@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 import {
   Factory,
   Plus,
@@ -66,6 +67,49 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
     currentUser
   } = useApp();
   const isAr = language === 'ar';
+
+  const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+
+  const filteredOrders = useMemo(() => {
+    return (productionOrders || []).filter(po => {
+      // 1. Date filters
+      if (erpFilters.dateFrom && po.productionDate < erpFilters.dateFrom) return false;
+      if (erpFilters.dateTo && po.productionDate > erpFilters.dateTo) return false;
+
+      // 2. Warehouse Type & ID
+      if (erpFilters.warehouseType || erpFilters.warehouseId) {
+        const wh = warehouses.find(w => w.id === po.wipWarehouseId);
+        if (erpFilters.warehouseType && wh?.type !== erpFilters.warehouseType) return false;
+        if (erpFilters.warehouseId && po.wipWarehouseId !== erpFilters.warehouseId) return false;
+      }
+
+      // 3. Item criteria
+      if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
+        const item = products.find(p => p.id === po.productId);
+        if (!item) return false;
+        
+        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
+        if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
+        const itemNameStr = isAr ? item.nameAr : item.nameEn;
+        if (erpFilters.itemDesc && !itemNameStr.toLowerCase().includes(erpFilters.itemDesc.toLowerCase())) return false;
+      }
+
+      // 4. Document properties
+      if (erpFilters.docNum && !po.orderNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
+      if (erpFilters.createdBy && po.createdBy !== erpFilters.createdBy) return false;
+
+      // 5. Status filter
+      if (erpFilters.status) {
+        if (po.status !== erpFilters.status) return false;
+      } else {
+        // Default: exclude CANCELLED orders from standard view
+        if ((po.status as string) === 'CANCELLED') return false;
+      }
+
+      return true;
+    });
+  }, [productionOrders, erpFilters, warehouses, products, isAr]);
 
   const [activeSubTab, setActiveSubTab] = useState<'orders' | 'cost-adjustments'>(initialTab);
 
@@ -543,10 +587,32 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
             </div>
           </div>
 
+          {/* ERP Smart Filter Bar */}
+          <div className="my-3">
+            <SmartFilterBar
+              filters={erpFilters}
+              onChange={setErpFilters}
+              config={{
+                date: true,
+                warehouseType: true,
+                warehouse: true,
+                itemType: true,
+                itemGroup: true,
+                itemCode: true,
+                itemDesc: true,
+                status: true,
+                docNum: true,
+                createdBy: true
+              }}
+              totalRecordsCount={productionOrders.length}
+              filteredRecordsCount={filteredOrders.length}
+            />
+          </div>
+
           {/* Production Orders DataTable */}
           <DataTable
             id="production-orders-table"
-            data={productionOrders}
+            data={filteredOrders}
             columns={columns}
             keyExtractor={o => o.id}
             searchFields={['orderNumber', 'productName', 'bomCode']}

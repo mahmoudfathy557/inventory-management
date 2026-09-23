@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Layers,
   Plus,
@@ -18,6 +18,7 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryIssue } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
+import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 
 export const InventoryIssuesView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -34,6 +35,49 @@ export const InventoryIssuesView: React.FC = () => {
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
+
+  const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+
+  const filteredIssues = useMemo(() => {
+    return (issues || []).filter(i => {
+      // 1. Date filters
+      if (erpFilters.dateFrom && i.createdDate < erpFilters.dateFrom) return false;
+      if (erpFilters.dateTo && i.createdDate > erpFilters.dateTo) return false;
+
+      // 2. Warehouse Type & ID
+      if (erpFilters.warehouseType || erpFilters.warehouseId) {
+        const wh = warehouses.find(w => w.id === i.fromWarehouseId);
+        if (erpFilters.warehouseType && wh?.type !== erpFilters.warehouseType) return false;
+        if (erpFilters.warehouseId && i.fromWarehouseId !== erpFilters.warehouseId) return false;
+      }
+
+      // 3. Item criteria
+      if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
+        const item = rawMaterials.find(m => m.id === i.itemId) || products.find(p => p.id === i.itemId);
+        if (!item) return false;
+        
+        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
+        if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
+        const itemNameStr = isAr ? item.nameAr : item.nameEn;
+        if (erpFilters.itemDesc && !itemNameStr.toLowerCase().includes(erpFilters.itemDesc.toLowerCase())) return false;
+      }
+
+      // 4. Document properties
+      if (erpFilters.docNum && !i.issueNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
+      if (erpFilters.createdBy && i.createdBy !== erpFilters.createdBy) return false;
+
+      // 5. Status filter
+      if (erpFilters.status) {
+        if (i.status !== erpFilters.status) return false;
+      } else {
+        // By default, do not show cancelled transactions in active operational view
+        if (i.status === 'CANCELLED') return false;
+      }
+
+      return true;
+    });
+  }, [issues, erpFilters, warehouses, rawMaterials, products, isAr]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [printIssue, setPrintIssue] = useState<InventoryIssue | null>(null);
@@ -236,9 +280,29 @@ export const InventoryIssuesView: React.FC = () => {
         </button>
       </div>
 
+      {/* ERP Smart Filter Bar */}
+      <SmartFilterBar
+        filters={erpFilters}
+        onChange={setErpFilters}
+        config={{
+          date: true,
+          warehouseType: true,
+          warehouse: true,
+          itemType: true,
+          itemGroup: true,
+          itemCode: true,
+          itemDesc: true,
+          status: true,
+          docNum: true,
+          createdBy: true
+        }}
+        totalRecordsCount={issues.length}
+        filteredRecordsCount={filteredIssues.length}
+      />
+
       <DataTable
         id="issues-table"
-        data={issues}
+        data={filteredIssues}
         columns={columns}
         keyExtractor={i => i.id}
         searchFields={['issueNumber', 'itemName', 'reason', 'reference']}

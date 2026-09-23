@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   PackagePlus,
   Plus,
@@ -20,6 +20,7 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryReceipt, ItemType } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
+import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 
 interface InventoryReceiptsViewProps {
   onOpenLandedCostModal?: (receiptId: string) => void;
@@ -42,6 +43,52 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
     getExchangeRateForDate
   } = useApp();
   const isAr = language === 'ar';
+
+  const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+
+  const filteredReceipts = useMemo(() => {
+    return (receipts || []).filter(r => {
+      // 1. Date filters
+      if (erpFilters.dateFrom && r.date < erpFilters.dateFrom) return false;
+      if (erpFilters.dateTo && r.date > erpFilters.dateTo) return false;
+
+      // 2. Warehouse Type & ID
+      if (erpFilters.warehouseType || erpFilters.warehouseId) {
+        const wh = warehouses.find(w => w.id === r.warehouseId);
+        if (erpFilters.warehouseType && wh?.type !== erpFilters.warehouseType) return false;
+        if (erpFilters.warehouseId && r.warehouseId !== erpFilters.warehouseId) return false;
+      }
+
+      // 3. Item criteria
+      if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
+        const item = rawMaterials.find(m => m.id === r.itemId) || products.find(p => p.id === r.itemId);
+        if (!item) return false;
+        
+        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
+        if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
+        const itemNameStr = isAr ? item.nameAr : item.nameEn;
+        if (erpFilters.itemDesc && !itemNameStr.toLowerCase().includes(erpFilters.itemDesc.toLowerCase())) return false;
+      }
+
+      // 4. Supplier
+      if (erpFilters.supplierId && r.supplierId !== erpFilters.supplierId) return false;
+
+      // 5. Document properties
+      if (erpFilters.docNum && !r.receiptNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
+      if (erpFilters.createdBy && r.createdBy !== erpFilters.createdBy) return false;
+
+      // 6. Status filter
+      if (erpFilters.status) {
+        if (r.status !== erpFilters.status) return false;
+      } else {
+        // By default, do not show cancelled transactions in active operational view
+        if (r.status === 'CANCELLED') return false;
+      }
+
+      return true;
+    });
+  }, [receipts, erpFilters, warehouses, rawMaterials, products, isAr]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<InventoryReceipt | null>(null);
@@ -303,10 +350,31 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
         </button>
       </div>
 
+      {/* ERP Smart Filter Bar */}
+      <SmartFilterBar
+        filters={erpFilters}
+        onChange={setErpFilters}
+        config={{
+          date: true,
+          warehouseType: true,
+          warehouse: true,
+          itemType: true,
+          itemGroup: true,
+          itemCode: true,
+          itemDesc: true,
+          supplier: true,
+          status: true,
+          docNum: true,
+          createdBy: true
+        }}
+        totalRecordsCount={receipts.length}
+        filteredRecordsCount={filteredReceipts.length}
+      />
+
       {/* Receipts DataTable */}
       <DataTable
         id="receipts-table"
-        data={receipts}
+        data={filteredReceipts}
         columns={columns}
         keyExtractor={r => r.id}
         searchFields={['receiptNumber', 'itemName', 'supplierName', 'reference']}

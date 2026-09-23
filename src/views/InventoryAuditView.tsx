@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BookOpen,
   FileSpreadsheet,
@@ -27,6 +27,7 @@ import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { formatCurrency, formatNumber, exportToCSV } from '../utils/formatters';
 import { InventoryLedgerEntry, ItemType, TransactionType } from '../types';
+import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 
 import { InventoryBalanceReport } from '../components/reports/InventoryBalanceReport';
 import { ProductionMonitoringReport } from '../components/reports/ProductionMonitoringReport';
@@ -110,34 +111,55 @@ export const InventoryAuditView: React.FC = () => {
     return set;
   }, [receipts, landedCosts, issues, transfers, productionOrders, materialIssues, productionReceipts, customerDeliveries]);
 
-  // Ledger Filter states
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState('ALL');
-  const [selectedItemId, setSelectedItemId] = useState('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
+  // Ledger ERP Filter state
+  const [erpFilters, setErpFilters] = useState<ERPFilters>({});
 
   // Filter entries for ledger
-  const filteredEntries = ledgerEntries.filter(entry => {
-    const isCancelled = cancelledDocNums.has(entry.documentNumber);
-    if (!showCanceled && isCancelled) {
-      return false;
-    }
-    if (selectedWarehouseId !== 'ALL' && entry.warehouseId !== selectedWarehouseId) {
-      return false;
-    }
-    if (selectedItemId !== 'ALL' && entry.itemId !== selectedItemId) {
-      return false;
-    }
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      return (
-        entry.documentNumber.toLowerCase().includes(q) ||
-        entry.itemName.toLowerCase().includes(q) ||
-        (entry.notes || '').toLowerCase().includes(q) ||
-        entry.createdBy.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  const filteredEntries = useMemo(() => {
+    return (ledgerEntries || []).filter(entry => {
+      // 1. Date filters
+      if (erpFilters.dateFrom && entry.date < erpFilters.dateFrom) return false;
+      if (erpFilters.dateTo && entry.date > erpFilters.dateTo) return false;
+
+      // 2. Warehouse Type & ID
+      if (erpFilters.warehouseType || erpFilters.warehouseId) {
+        const wh = warehouses.find(w => w.id === entry.warehouseId);
+        if (erpFilters.warehouseType && wh?.type !== erpFilters.warehouseType) return false;
+        if (erpFilters.warehouseId && entry.warehouseId !== erpFilters.warehouseId) return false;
+      }
+
+      // 3. Item criteria
+      if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
+        const item = rawMaterials.find(m => m.id === entry.itemId) || products.find(p => p.id === entry.itemId);
+        if (!item) return false;
+        
+        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
+        if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
+        const itemNameStr = isAr ? item.nameAr : item.nameEn;
+        if (erpFilters.itemDesc && !itemNameStr.toLowerCase().includes(erpFilters.itemDesc.toLowerCase())) return false;
+      }
+
+      // 4. Document Type & Document Number
+      if (erpFilters.docType && entry.transactionType !== erpFilters.docType) return false;
+      if (erpFilters.docNum && !entry.documentNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
+
+      // 5. Created By
+      if (erpFilters.createdBy && entry.createdBy !== erpFilters.createdBy) return false;
+
+      // 6. Canceled/Status Filter
+      const isCancelled = cancelledDocNums.has(entry.documentNumber);
+      if (erpFilters.status) {
+        if (erpFilters.status === 'CANCELLED' && !isCancelled) return false;
+        if (erpFilters.status === 'POSTED' && isCancelled) return false;
+      } else {
+        // By default, exclude canceled documents from active calculations and lists unless requested
+        if (isCancelled) return false;
+      }
+
+      return true;
+    });
+  }, [ledgerEntries, erpFilters, warehouses, rawMaterials, products, cancelledDocNums, isAr]);
 
   const totalIn = filteredEntries.reduce((sum, e) => sum + e.qtyIn, 0);
   const totalOut = filteredEntries.reduce((sum, e) => sum + e.qtyOut, 0);
@@ -820,15 +842,15 @@ export const InventoryAuditView: React.FC = () => {
   return (
     <div className="space-y-5" id="view-inventory-reports">
       {/* Official Audit Print Header (Visible only on print / PDF hard copies) */}
-      <AuditPrintHeader
+       <AuditPrintHeader
         reportTitleAr={tabTitles[activeTab].titleAr}
         reportTitleEn={tabTitles[activeTab].titleEn}
         reportSubtitleAr={tabTitles[activeTab].subAr}
         reportSubtitleEn={tabTitles[activeTab].subEn}
         activeFilterSummaryAr={
           activeTab === 'ledger'
-            ? selectedWarehouseId !== 'ALL' || selectedItemId !== 'ALL'
-              ? `المستودع: ${selectedWarehouseId !== 'ALL' ? warehouses.find(w => w.id === selectedWarehouseId)?.nameAr : 'الكل'} | الصنف: ${selectedItemId !== 'ALL' ? (rawMaterials.find(r => r.id === selectedItemId)?.nameAr || products.find(p => p.id === selectedItemId)?.nameAr) : 'الكل'}`
+            ? erpFilters.warehouseId || erpFilters.itemCode || erpFilters.dateFrom || erpFilters.dateTo
+              ? `المستودع: ${erpFilters.warehouseId ? warehouses.find(w => w.id === erpFilters.warehouseId)?.nameAr : 'الكل'} | كود الصنف: ${erpFilters.itemCode || 'الكل'}`
               : 'كافة المستودعات والأصناف المسجلة'
             : undefined
         }
@@ -908,84 +930,26 @@ export const InventoryAuditView: React.FC = () => {
       {/* Ledger Tab Content */}
       {activeTab === 'ledger' && (
         <div className="space-y-4">
-          {/* Controls Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200 text-xs no-print">
-            <div>
-              <label className="block text-slate-600 font-semibold mb-1">
-                {isAr ? 'تصفية حسب المستودع / الصالة:' : 'Filter by Warehouse:'}
-              </label>
-              <select
-                value={selectedWarehouseId}
-                onChange={e => setSelectedWarehouseId(e.target.value)}
-                className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-              >
-                <option value="ALL">{isAr ? 'جميع المستودعات والصالات' : 'All Warehouses'}</option>
-                {warehouses.map(w => (
-                  <option key={w.id} value={w.id}>
-                    {w.nameAr} ({w.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-slate-600 font-semibold mb-1">
-                {isAr ? 'تصفية حسب الصنف / كرت الصنف:' : 'Filter by Item Card:'}
-              </label>
-              <select
-                value={selectedItemId}
-                onChange={e => setSelectedItemId(e.target.value)}
-                className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-              >
-                <option value="ALL">{isAr ? 'جميع الأصناف والمواد الخام' : 'All Items'}</option>
-                <optgroup label={isAr ? 'المواد الخام' : 'Raw Materials'}>
-                  {rawMaterials.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.nameAr}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label={isAr ? 'المنتجات التامة' : 'Finished Goods'}>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.nameAr}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-slate-600 font-semibold mb-1">
-                {isAr ? 'بحث سريع في المستندات:' : 'Quick Search:'}
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  placeholder={isAr ? 'رقم المستند، الصنف، اسم المحرر...' : 'Doc number, item, user...'}
-                  className="w-full p-2 pl-8 rounded-lg border border-slate-200"
-                />
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-slate-600 font-semibold mb-1">
-                {isAr ? 'العمليات المُلغاة:' : 'Canceled Documents:'}
-              </label>
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition h-[36px]">
-                <input
-                  type="checkbox"
-                  checked={showCanceled}
-                  onChange={e => setShowCanceled(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                />
-                <span className="font-semibold text-slate-700">{isAr ? 'إظهار المستندات الملغاة' : 'Show Canceled Docs'}</span>
-              </label>
-            </div>
-          </div>
+          {/* ERP Smart Filter Bar */}
+          <SmartFilterBar
+            filters={erpFilters}
+            onChange={setErpFilters}
+            config={{
+              date: true,
+              warehouseType: true,
+              warehouse: true,
+              itemType: true,
+              itemGroup: true,
+              itemCode: true,
+              itemDesc: true,
+              status: true,
+              docType: true,
+              docNum: true,
+              createdBy: true
+            }}
+            totalRecordsCount={ledgerEntries.length}
+            filteredRecordsCount={filteredEntries.length}
+          />
 
           {/* Real-time Audit Ledger Reconciliation Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print-avoid-break">

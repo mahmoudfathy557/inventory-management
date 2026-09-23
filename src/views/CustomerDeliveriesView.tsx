@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Truck,
   Plus,
@@ -20,6 +20,7 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { CustomerDelivery } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
+import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 
 export const CustomerDeliveriesView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -36,6 +37,49 @@ export const CustomerDeliveriesView: React.FC = () => {
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
+
+  const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+
+  const filteredDeliveries = useMemo(() => {
+    return (customerDeliveries || []).filter(d => {
+      // 1. Date filters
+      if (erpFilters.dateFrom && d.createdDate < erpFilters.dateFrom) return false;
+      if (erpFilters.dateTo && d.createdDate > erpFilters.dateTo) return false;
+
+      // 2. Warehouse Type & ID
+      if (erpFilters.warehouseType || erpFilters.warehouseId) {
+        const wh = warehouses.find(w => w.id === d.warehouseId);
+        if (erpFilters.warehouseType && wh?.type !== erpFilters.warehouseType) return false;
+        if (erpFilters.warehouseId && d.warehouseId !== erpFilters.warehouseId) return false;
+      }
+
+      // 3. Item criteria
+      if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
+        const item = products.find(p => p.id === d.productId);
+        if (!item) return false;
+        
+        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
+        if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
+        const itemNameStr = isAr ? item.nameAr : item.nameEn;
+        if (erpFilters.itemDesc && !itemNameStr.toLowerCase().includes(erpFilters.itemDesc.toLowerCase())) return false;
+      }
+
+      // 4. Document properties
+      if (erpFilters.docNum && !d.deliveryNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
+      if (erpFilters.createdBy && d.createdBy !== erpFilters.createdBy) return false;
+
+      // 5. Status filter
+      if (erpFilters.status) {
+        if (d.status !== erpFilters.status) return false;
+      } else {
+        // By default, do not show cancelled transactions in active operational view
+        if (d.status === 'CANCELLED') return false;
+      }
+
+      return true;
+    });
+  }, [customerDeliveries, erpFilters, warehouses, products, isAr]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [printDelivery, setPrintDelivery] = useState<CustomerDelivery | null>(null);
@@ -276,9 +320,29 @@ export const CustomerDeliveriesView: React.FC = () => {
         </button>
       </div>
 
+      {/* ERP Smart Filter Bar */}
+      <SmartFilterBar
+        filters={erpFilters}
+        onChange={setErpFilters}
+        config={{
+          date: true,
+          warehouseType: true,
+          warehouse: true,
+          itemType: true,
+          itemGroup: true,
+          itemCode: true,
+          itemDesc: true,
+          status: true,
+          docNum: true,
+          createdBy: true
+        }}
+        totalRecordsCount={customerDeliveries.length}
+        filteredRecordsCount={filteredDeliveries.length}
+      />
+
       <DataTable
         id="deliveries-table"
-        data={customerDeliveries}
+        data={filteredDeliveries}
         columns={columns}
         keyExtractor={d => d.id}
         searchFields={['deliveryNumber', 'customerName', 'productName', 'reference']}
