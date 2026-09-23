@@ -56,7 +56,10 @@ export const InventoryIssuesView: React.FC = () => {
         const item = rawMaterials.find(m => m.id === i.itemId) || products.find(p => p.id === i.itemId);
         if (!item) return false;
         
-        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemType) {
+          const resolvedItemType = (item as any).itemType || (item as any).productType;
+          if (resolvedItemType !== erpFilters.itemType) return false;
+        }
         if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
         if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
         const itemNameStr = isAr ? item.nameAr : item.nameEn;

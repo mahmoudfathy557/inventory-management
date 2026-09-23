@@ -31,6 +31,7 @@ export interface ERPFilters {
   docType?: string;
   docNum?: string;
   createdBy?: string;
+  landedCostStatus?: string;
 }
 
 export interface FilterBarConfig {
@@ -46,6 +47,7 @@ export interface FilterBarConfig {
   docType?: boolean;
   docNum?: boolean;
   createdBy?: boolean;
+  landedCostStatus?: boolean;
 }
 
 interface SmartFilterBarProps {
@@ -175,7 +177,8 @@ export const SmartFilterBar: React.FC<SmartFilterBarProps> = ({
     clearAll: isAr ? 'إعادة ضبط' : 'Reset All',
     recordsFound: isAr ? 'سجلات مطابقة' : 'records found',
     totalOf: isAr ? 'من إجمالي' : 'out of',
-    activeFilters: isAr ? 'المرشحات النشطة' : 'Active Filters'
+    activeFilters: isAr ? 'المرشحات النشطة' : 'Active Filters',
+    landedCostStatus: isAr ? 'حالة تكلفة الإنزال' : 'Landed Cost'
   };
 
   // Convert status keys to user-friendly labels
@@ -283,6 +286,12 @@ export const SmartFilterBar: React.FC<SmartFilterBarProps> = ({
     if (filters.createdBy) {
       const usr = users.find(u => u.id === filters.createdBy || u.fullName === filters.createdBy);
       list.push({ key: 'createdBy', label: t.user, value: usr ? usr.fullName : filters.createdBy });
+    }
+    if (filters.landedCostStatus) {
+      const valLabel = filters.landedCostStatus === 'HAS_LC' 
+        ? (isAr ? 'يوجد تكلفة إنزال' : 'Has Landed Cost')
+        : (isAr ? 'بدون تكلفة إنزال' : 'No Landed Cost');
+      list.push({ key: 'landedCostStatus', label: t.landedCostStatus, value: valLabel });
     }
 
     return list;
@@ -614,6 +623,25 @@ export const SmartFilterBar: React.FC<SmartFilterBarProps> = ({
                   {u.fullName}
                 </option>
               ))}
+            </select>
+          </div>
+        )}
+
+        {/* Landed Cost Status */}
+        {config.landedCostStatus && (
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+              <Tag className="w-3 h-3 text-slate-400" />
+              <span>{t.landedCostStatus}</span>
+            </label>
+            <select
+              value={filters.landedCostStatus || ''}
+              onChange={e => updateFilter('landedCostStatus', e.target.value)}
+              className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">{isAr ? 'الكل' : 'All'}</option>
+              <option value="HAS_LC">{isAr ? 'يوجد تكلفة إنزال' : 'Has Landed Cost'}</option>
+              <option value="NO_LC">{isAr ? 'بدون تكلفة إنزال' : 'No Landed Cost'}</option>
             </select>
           </div>
         )}

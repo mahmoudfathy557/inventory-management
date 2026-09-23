@@ -64,7 +64,10 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
         const item = rawMaterials.find(m => m.id === r.itemId) || products.find(p => p.id === r.itemId);
         if (!item) return false;
         
-        if (erpFilters.itemType && (item as any).itemType !== erpFilters.itemType) return false;
+        if (erpFilters.itemType) {
+          const resolvedItemType = (item as any).itemType || (item as any).productType;
+          if (resolvedItemType !== erpFilters.itemType) return false;
+        }
         if (erpFilters.itemGroupId && item.categoryId !== erpFilters.itemGroupId) return false;
         if (erpFilters.itemCode && !item.code.toLowerCase().includes(erpFilters.itemCode.toLowerCase())) return false;
         const itemNameStr = isAr ? item.nameAr : item.nameEn;
@@ -78,7 +81,14 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
       if (erpFilters.docNum && !r.receiptNumber.toLowerCase().includes(erpFilters.docNum.toLowerCase())) return false;
       if (erpFilters.createdBy && r.createdBy !== erpFilters.createdBy) return false;
 
-      // 6. Status filter
+      // 6. Landed Cost Status
+      if (erpFilters.landedCostStatus) {
+        const hasLC = (r.landedCostAllocatedEGP || 0) > 0;
+        if (erpFilters.landedCostStatus === 'HAS_LC' && !hasLC) return false;
+        if (erpFilters.landedCostStatus === 'NO_LC' && hasLC) return false;
+      }
+
+      // 7. Status filter
       if (erpFilters.status) {
         if (r.status !== erpFilters.status) return false;
       } else {
@@ -365,7 +375,8 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
           supplier: true,
           status: true,
           docNum: true,
-          createdBy: true
+          createdBy: true,
+          landedCostStatus: true
         }}
         totalRecordsCount={receipts.length}
         filteredRecordsCount={filteredReceipts.length}

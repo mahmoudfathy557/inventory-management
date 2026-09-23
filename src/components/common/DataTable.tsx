@@ -52,12 +52,24 @@ export function DataTable<T extends Record<string, any>>({
   actions,
   defaultSortKey,
   defaultSortOrder = 'desc',
-  pageSize = 10,
+  pageSize: defaultPageSizeProp = 10,
   isLoading = false,
   rowClassName
 }: DataTableProps<T>) {
   const { language } = useApp();
   const isAr = language === 'ar';
+
+  // Persistent Page Size
+  const storageKey = `datatable_pagesize_${id}`;
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      if (saved === 'all') return 999999;
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && [20, 50, 100, 200, 500].includes(parsed)) return parsed;
+    }
+    return defaultPageSizeProp || 20;
+  });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<string | undefined>(defaultSortKey || columns[0]?.key);
@@ -106,10 +118,14 @@ export function DataTable<T extends Record<string, any>>({
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+  
+  // Guard current page to never be out of range after filters
+  const activePage = Math.min(currentPage, totalPages);
+
   const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
+    const start = (activePage - 1) * pageSize;
     return sortedData.slice(start, start + pageSize);
-  }, [sortedData, currentPage, pageSize]);
+  }, [sortedData, activePage, pageSize]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -274,30 +290,64 @@ export function DataTable<T extends Record<string, any>>({
       </div>
 
       {/* Pagination Footer */}
-      {totalPages > 1 && (
-        <div className="p-3 border-t border-slate-200 flex items-center justify-between bg-slate-50/50 text-xs no-print">
-          <span className="text-slate-500">
-            {isAr
-              ? `صفحة ${currentPage} من ${totalPages} (${sortedData.length} سجل)`
-              : `Page ${currentPage} of ${totalPages} (${sortedData.length} total)`}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              className="p-1.5 rounded-md border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50"
-            >
-              <ChevronRight className={`w-4 h-4 ${isAr ? '' : 'rotate-180'}`} />
-            </button>
-            <span className="px-2 font-mono text-xs">{currentPage}</span>
-            <button
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              className="p-1.5 rounded-md border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50"
-            >
-              <ChevronLeft className={`w-4 h-4 ${isAr ? '' : 'rotate-180'}`} />
-            </button>
+      {sortedData.length > 0 && (
+        <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 text-xs no-print">
+          <div className="flex items-center gap-4">
+            <span className="text-slate-500">
+              {isAr
+                ? `صفحة ${activePage} من ${totalPages} (${sortedData.length} سجل)`
+                : `Page ${activePage} of ${totalPages} (${sortedData.length} total)`}
+            </span>
+            
+            <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4 rtl:border-l-0 rtl:border-r rtl:pl-0 rtl:pr-4">
+              <span className="text-slate-500">
+                {isAr ? 'عدد الصفوف لكل صفحة:' : 'Rows per page:'}
+              </span>
+              <select
+                value={pageSize === 999999 ? 'all' : String(pageSize)}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === 'all') {
+                    setPageSize(999999);
+                    localStorage.setItem(storageKey, 'all');
+                  } else {
+                    const num = parseInt(val, 10);
+                    setPageSize(num);
+                    localStorage.setItem(storageKey, String(num));
+                  }
+                  setCurrentPage(1);
+                }}
+                className="p-1 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+                <option value="all">{isAr ? 'الكل' : 'All'}</option>
+              </select>
+            </div>
           </div>
+          
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                disabled={activePage <= 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                className="p-1.5 rounded-md border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50 transition"
+              >
+                <ChevronRight className={`w-4 h-4 ${isAr ? '' : 'rotate-180'}`} />
+              </button>
+              <span className="px-2 font-mono text-xs font-bold">{activePage}</span>
+              <button
+                disabled={activePage >= totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                className="p-1.5 rounded-md border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-50 transition"
+              >
+                <ChevronLeft className={`w-4 h-4 ${isAr ? '' : 'rotate-180'}`} />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
