@@ -43,6 +43,7 @@ export const LandedCostReport: React.FC = () => {
   });
 
   const filteredRows = reportRows.filter(r => {
+    if (r.status === 'CANCELLED') return false;
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       return (

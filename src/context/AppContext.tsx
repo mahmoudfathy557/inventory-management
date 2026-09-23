@@ -791,20 +791,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!item) {
       return { warehouseId, currentQty: 0, movingAverageCost: 0, totalValue: 0 };
     }
-    if (item.warehouseStock && item.warehouseStock[warehouseId]) {
-      return item.warehouseStock[warehouseId];
-    }
-    const computedMap = computeItemWarehouseStockMap(item, ledgerEntries, item.defaultWarehouseId);
+    const cancelledDocNums = new Set<string>();
+    receipts.forEach(r => { if (r.status === 'CANCELLED') cancelledDocNums.add(r.receiptNumber); });
+    landedCosts.forEach(lc => { if (lc.status === 'CANCELLED') cancelledDocNums.add(lc.landedCostNumber); });
+    issues.forEach(i => { if (i.status === 'CANCELLED') cancelledDocNums.add(i.issueNumber); });
+    transfers.forEach(t => { if (t.status === 'CANCELLED') cancelledDocNums.add(t.transferNumber); });
+    productionOrders.forEach(po => { if ((po.status as string) === 'CANCELLED') cancelledDocNums.add(po.orderNumber); });
+    materialIssues.forEach(mi => { if (mi.status === 'CANCELLED') cancelledDocNums.add(mi.issueNumber); });
+    productionReceipts.forEach(pr => { if (pr.status === 'CANCELLED') cancelledDocNums.add(pr.receiptNumber); });
+    customerDeliveries.forEach(d => { if (d.status === 'CANCELLED') cancelledDocNums.add(d.deliveryNumber); });
+
+    const computedMap = computeItemWarehouseStockMap(item, ledgerEntries, item.defaultWarehouseId, cancelledDocNums);
     if (computedMap[warehouseId]) {
       return computedMap[warehouseId];
-    }
-    if (item.defaultWarehouseId === warehouseId) {
-      return {
-        warehouseId,
-        currentQty: item.currentQty || 0,
-        movingAverageCost: item.movingAverageCost || 0,
-        totalValue: item.totalValue || 0
-      };
     }
     return { warehouseId, currentQty: 0, movingAverageCost: 0, totalValue: 0 };
   };
@@ -812,10 +811,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const getAllItemWarehouseStocks = (itemId: string): ItemWarehouseStock[] => {
     const item = rawMaterials.find(m => m.id === itemId) || products.find(p => p.id === itemId);
     if (!item) return [];
-    const whMap = (item.warehouseStock && Object.keys(item.warehouseStock).length > 0)
-      ? item.warehouseStock
-      : computeItemWarehouseStockMap(item, ledgerEntries, item.defaultWarehouseId);
-    return Object.values(whMap);
+    const cancelledDocNums = new Set<string>();
+    receipts.forEach(r => { if (r.status === 'CANCELLED') cancelledDocNums.add(r.receiptNumber); });
+    landedCosts.forEach(lc => { if (lc.status === 'CANCELLED') cancelledDocNums.add(lc.landedCostNumber); });
+    issues.forEach(i => { if (i.status === 'CANCELLED') cancelledDocNums.add(i.issueNumber); });
+    transfers.forEach(t => { if (t.status === 'CANCELLED') cancelledDocNums.add(t.transferNumber); });
+    productionOrders.forEach(po => { if ((po.status as string) === 'CANCELLED') cancelledDocNums.add(po.orderNumber); });
+    materialIssues.forEach(mi => { if (mi.status === 'CANCELLED') cancelledDocNums.add(mi.issueNumber); });
+    productionReceipts.forEach(pr => { if (pr.status === 'CANCELLED') cancelledDocNums.add(pr.receiptNumber); });
+    customerDeliveries.forEach(d => { if (d.status === 'CANCELLED') cancelledDocNums.add(d.deliveryNumber); });
+
+    const computedMap = computeItemWarehouseStockMap(item, ledgerEntries, item.defaultWarehouseId, cancelledDocNums);
+    return Object.values(computedMap);
   };
 
   // 1. ADD INVENTORY RECEIPT (Receipt / Add Inventory into specific Warehouse)

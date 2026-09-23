@@ -112,7 +112,7 @@ export const InventoryBalanceReport: React.FC = () => {
 
       relevantWarehouses.forEach(wh => {
         const itemEntries = ledgerEntries.filter(
-          e => e.itemId === item.id && e.warehouseId === wh.id
+          e => e.itemId === item.id && e.warehouseId === wh.id && !cancelledDocNums.has(e.documentNumber)
         );
 
         if (itemEntries.length === 0 && item.defaultWh !== wh.id) {
