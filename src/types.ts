@@ -228,6 +228,17 @@ export interface CurrencyRate {
   createdBy?: string;
 }
 
+export interface ItemWarehouseStock {
+  warehouseId: string;
+  warehouseName?: string;
+  currentQty: number;
+  movingAverageCost: number;
+  totalValue: number;
+  minStock?: number;
+  maxStock?: number;
+  reorderLevel?: number;
+}
+
 export interface RawMaterial {
   id: string;
   code: string;
@@ -249,10 +260,12 @@ export interface RawMaterial {
   reorderLevel: number;
   active: boolean;
   notes?: string;
-  // Live stock cache
+  // Live stock cache (Company aggregated)
   currentQty: number;
   movingAverageCost: number;
   totalValue: number;
+  // SAP Business One style: Warehouse-specific valuation layer (Item + Warehouse = Independent Valuation)
+  warehouseStock?: Record<string, ItemWarehouseStock>;
 }
 
 export interface Product {
@@ -272,10 +285,12 @@ export interface Product {
   defaultWarehouseId: string;
   active: boolean;
   notes?: string;
-  // Live stock cache
+  // Live stock cache (Company aggregated)
   currentQty: number;
   movingAverageCost: number;
   totalValue: number;
+  // SAP Business One style: Warehouse-specific valuation layer (Item + Warehouse = Independent Valuation)
+  warehouseStock?: Record<string, ItemWarehouseStock>;
 }
 
 export interface Machine {

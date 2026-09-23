@@ -46,7 +46,8 @@ export const InventoryBalanceReport: React.FC = () => {
     rawMaterials,
     products,
     warehouses,
-    ledgerEntries
+    ledgerEntries,
+    getItemWarehouseValuation
   } = useApp();
   const isAr = language === 'ar';
 
@@ -137,8 +138,10 @@ export const InventoryBalanceReport: React.FC = () => {
 
         const totalIn = receiptsQty + transfersInQty + productionReceiptsQty + scrapQty;
         const totalOut = issuesQty + transfersOutQty + productionConsumptionQty;
-        const closingQty = Math.max(0, totalIn - totalOut);
-        const closingValue = closingQty * item.mac;
+        const whStock = getItemWarehouseValuation(item.id, wh.id);
+        const closingQty = whStock.currentQty;
+        const movingAverageCost = whStock.movingAverageCost;
+        const closingValue = whStock.totalValue;
 
         // Skip rows that have zero activity and zero stock
         if (totalIn === 0 && totalOut === 0 && closingQty === 0) return;
@@ -160,7 +163,7 @@ export const InventoryBalanceReport: React.FC = () => {
           productionConsumptionQty,
           scrapQty,
           closingQty,
-          movingAverageCost: item.mac,
+          movingAverageCost,
           closingValue
         });
       });

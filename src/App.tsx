@@ -44,11 +44,20 @@ const VALID_NAV_ITEMS: NavItem[] = [
 ];
 
 function getInitialTab(isAuthenticated: boolean): NavItem {
-  // 1. Check URL hash first (e.g. #master-data, #production)
+  let hasUser = isAuthenticated;
+  if (typeof window !== 'undefined' && !hasUser) {
+    try {
+      const storedUser = localStorage.getItem('mfg_inv_odoo_v2_user');
+      const token = localStorage.getItem('auth_token');
+      if (storedUser || token) hasUser = true;
+    } catch {}
+  }
+
+  // 1. Check URL hash first (e.g. #master-data, #production, #reports)
   if (typeof window !== 'undefined' && window.location.hash) {
     const rawHash = window.location.hash.replace(/^#\/?/, '').trim() as NavItem;
     if (VALID_NAV_ITEMS.includes(rawHash)) {
-      if (!isAuthenticated && rawHash !== 'auth') {
+      if (!hasUser && rawHash !== 'auth') {
         try {
           localStorage.setItem('mrp_active_tab', rawHash);
         } catch {}
@@ -63,7 +72,7 @@ function getInitialTab(isAuthenticated: boolean): NavItem {
     try {
       const saved = localStorage.getItem('mrp_active_tab') as NavItem | null;
       if (saved && VALID_NAV_ITEMS.includes(saved)) {
-        if (!isAuthenticated && saved !== 'auth') {
+        if (!hasUser && saved !== 'auth') {
           return 'auth';
         }
         return saved;
@@ -71,7 +80,7 @@ function getInitialTab(isAuthenticated: boolean): NavItem {
     } catch {}
   }
 
-  return isAuthenticated ? 'dashboard' : 'auth';
+  return hasUser ? 'dashboard' : 'auth';
 }
 
 const MainAppContent: React.FC = () => {
@@ -83,10 +92,28 @@ const MainAppContent: React.FC = () => {
   const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(false);
   const [selectedReceiptForLandedCost, setSelectedReceiptForLandedCost] = useState<string | undefined>();
 
+  // Restore saved tab when user is authenticated (prevents jumping to dashboard on refresh)
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      try {
+        const rawHash = window.location.hash.replace(/^#\/?/, '').trim() as NavItem;
+        const savedTab = localStorage.getItem('mrp_active_tab') as NavItem | null;
+        const target = (VALID_NAV_ITEMS.includes(rawHash) && rawHash !== 'auth')
+          ? rawHash
+          : (savedTab && VALID_NAV_ITEMS.includes(savedTab) && savedTab !== 'auth' ? savedTab : null);
+        if (target && target !== currentTab) {
+          setCurrentTab(target);
+        }
+      } catch {}
+    }
+  }, [isAuthenticated]);
+
   // Synchronize current tab to localStorage and URL hash
   React.useEffect(() => {
     try {
-      localStorage.setItem('mrp_active_tab', currentTab);
+      if (currentTab !== 'auth') {
+        localStorage.setItem('mrp_active_tab', currentTab);
+      }
       const targetHash = `#${currentTab}`;
       if (window.location.hash !== targetHash) {
         window.history.replaceState(null, '', targetHash);

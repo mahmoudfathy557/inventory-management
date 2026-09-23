@@ -31,7 +31,8 @@ import {
   AuditLogEntry,
   OdooConfig,
   OdooSyncLog,
-  ItemCategory
+  ItemCategory,
+  ItemWarehouseStock
 } from '../types';
 import {
   INITIAL_WAREHOUSES,
@@ -169,6 +170,10 @@ interface AppContextType {
   cancelTransaction: (documentType: string, documentNumber: string, reason: string) => void;
   resetToSampleMVP: () => void;
   seedFullCoverageData: () => void;
+
+  // Warehouse-Level Valuation (Item + Warehouse = Independent Valuation Layer)
+  getItemWarehouseValuation: (itemId: string, warehouseId: string) => ItemWarehouseStock;
+  getAllItemWarehouseStocks: (itemId: string) => ItemWarehouseStock[];
 
   // Master Data Add/Update/Delete
   saveRawMaterial: (material: RawMaterial) => void;
@@ -365,6 +370,96 @@ function healLedgerEntries(
   return hasChanges ? healed : entries;
 }
 
+/**
+ * Computes warehouse-specific valuation layers (Item + Warehouse = Independent Valuation Layer)
+ * Strictly adheres to SAP Business One inventory valuation rules:
+ * - Each warehouse maintains independent currentQty, movingAverageCost, and totalValue
+ * - Transfers take source warehouse's MAC and recalculate destination warehouse's MAC
+ * - Landed costs allocate value to the receiving warehouse layer
+ */
+export function computeItemWarehouseStockMap(
+  item: RawMaterial | Product,
+  entries: InventoryLedgerEntry[],
+  defaultWhId?: string
+): Record<string, ItemWarehouseStock> {
+  const itemEntries = (entries || []).filter(e => e.itemId === item.id);
+  const whMap: Record<string, ItemWarehouseStock> = {};
+  const fallbackWh = defaultWhId || item.defaultWarehouseId || 'wh-raw';
+
+  // If no ledger entries exist yet, use item's initial state
+  if (itemEntries.length === 0) {
+    if (item.warehouseStock && Object.keys(item.warehouseStock).length > 0) {
+      return item.warehouseStock;
+    }
+    whMap[fallbackWh] = {
+      warehouseId: fallbackWh,
+      currentQty: item.currentQty || 0,
+      movingAverageCost: item.movingAverageCost || 0,
+      totalValue: item.totalValue || ((item.currentQty || 0) * (item.movingAverageCost || 0))
+    };
+    return whMap;
+  }
+
+  // Sort chronologically
+  const sorted = [...itemEntries].sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+
+  for (const entry of sorted) {
+    const whId = entry.warehouseId;
+    if (!whId) continue;
+    if (!whMap[whId]) {
+      whMap[whId] = {
+        warehouseId: whId,
+        warehouseName: entry.warehouseName,
+        currentQty: 0,
+        movingAverageCost: 0,
+        totalValue: 0
+      };
+    }
+
+    const ws = whMap[whId];
+
+    if (entry.transactionType === TransactionType.LANDED_COST) {
+      // Landed cost increases valuation layer without changing quantity
+      const addedVal = entry.transactionValueEGP || 0;
+      ws.totalValue += addedVal;
+      ws.movingAverageCost = ws.currentQty > 0 ? (ws.totalValue / ws.currentQty) : (entry.movingAverageCostEGP || ws.movingAverageCost);
+    } else if (entry.transactionType === TransactionType.COST_ADJUSTMENT) {
+      const addedVal = entry.transactionValueEGP || 0;
+      ws.totalValue += addedVal;
+      ws.movingAverageCost = ws.currentQty > 0 ? (ws.totalValue / ws.currentQty) : ws.movingAverageCost;
+    } else {
+      if (entry.qtyIn > 0) {
+        const inVal = entry.transactionValueEGP || (entry.qtyIn * entry.unitCostEGP);
+        const newQty = ws.currentQty + entry.qtyIn;
+        const newVal = ws.totalValue + inVal;
+        ws.currentQty = newQty;
+        ws.totalValue = newVal;
+        ws.movingAverageCost = newQty > 0 ? (newVal / newQty) : (entry.unitCostEGP || 0);
+      }
+      if (entry.qtyOut > 0) {
+        const outVal = entry.transactionValueEGP || (entry.qtyOut * ws.movingAverageCost);
+        ws.currentQty = Math.max(0, ws.currentQty - entry.qtyOut);
+        ws.totalValue = Math.max(0, ws.totalValue - outVal);
+        if (ws.currentQty === 0) {
+          ws.totalValue = 0;
+        }
+        // MAC in warehouse remains unchanged on outward consumption/transfer
+      }
+    }
+  }
+
+  if (Object.keys(whMap).length === 0) {
+    whMap[fallbackWh] = {
+      warehouseId: fallbackWh,
+      currentQty: 0,
+      movingAverageCost: 0,
+      totalValue: 0
+    };
+  }
+
+  return whMap;
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => loadStorage<Language>('lang', 'ar'));
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
@@ -399,8 +494,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currencies, setCurrencies] = useState<Currency[]>(() => loadStorage('currencies', INITIAL_CURRENCIES));
   const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>(() => loadStorage('currencyRates', INITIAL_CURRENCY_RATES));
   const [itemCategories, setItemCategories] = useState<ItemCategory[]>(() => loadStorage('itemCategories', INITIAL_ITEM_CATEGORIES));
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(() => loadStorage('rawMaterials', INITIAL_RAW_MATERIALS));
-  const [products, setProducts] = useState<Product[]>(() => loadStorage('products', INITIAL_PRODUCTS));
+
+  const [ledgerEntries, setLedgerEntries] = useState<InventoryLedgerEntry[]>(() => {
+    const loaded = loadStorage<InventoryLedgerEntry[]>('ledgerEntries', INITIAL_LEDGER_ENTRIES);
+    const loadedRMs = loadStorage<RawMaterial[]>('rawMaterials', INITIAL_RAW_MATERIALS);
+    const loadedProds = loadStorage<Product[]>('products', INITIAL_PRODUCTS);
+    const loadedRcpts = loadStorage<InventoryReceipt[]>('receipts', INITIAL_RECEIPTS);
+    return healLedgerEntries(loaded, loadedRMs, loadedProds, loadedRcpts);
+  });
+
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(() => {
+    const loaded = loadStorage<RawMaterial[]>('rawMaterials', INITIAL_RAW_MATERIALS);
+    const loadedLedger = loadStorage<InventoryLedgerEntry[]>('ledgerEntries', INITIAL_LEDGER_ENTRIES);
+    return loaded.map(item => {
+      const whMap = computeItemWarehouseStockMap(item, loadedLedger, item.defaultWarehouseId);
+      const hasEntries = loadedLedger.some(e => e.itemId === item.id);
+      if (hasEntries) {
+        const totalQty = Object.values(whMap).reduce((s, w) => s + w.currentQty, 0);
+        const totalVal = Object.values(whMap).reduce((s, w) => s + w.totalValue, 0);
+        const mac = totalQty > 0 ? totalVal / totalQty : item.movingAverageCost;
+        return {
+          ...item,
+          currentQty: totalQty,
+          totalValue: totalVal,
+          movingAverageCost: mac,
+          warehouseStock: whMap
+        };
+      }
+      return {
+        ...item,
+        warehouseStock: item.warehouseStock || whMap
+      };
+    });
+  });
+
+  const [products, setProducts] = useState<Product[]>(() => {
+    const loaded = loadStorage<Product[]>('products', INITIAL_PRODUCTS);
+    const loadedLedger = loadStorage<InventoryLedgerEntry[]>('ledgerEntries', INITIAL_LEDGER_ENTRIES);
+    return loaded.map(item => {
+      const whMap = computeItemWarehouseStockMap(item, loadedLedger, item.defaultWarehouseId);
+      const hasEntries = loadedLedger.some(e => e.itemId === item.id);
+      if (hasEntries) {
+        const totalQty = Object.values(whMap).reduce((s, w) => s + w.currentQty, 0);
+        const totalVal = Object.values(whMap).reduce((s, w) => s + w.totalValue, 0);
+        const mac = totalQty > 0 ? totalVal / totalQty : item.movingAverageCost;
+        return {
+          ...item,
+          currentQty: totalQty,
+          totalValue: totalVal,
+          movingAverageCost: mac,
+          warehouseStock: whMap
+        };
+      }
+      return {
+        ...item,
+        warehouseStock: item.warehouseStock || whMap
+      };
+    });
+  });
+
   const [machines, setMachines] = useState<Machine[]>(() => loadStorage('machines', INITIAL_MACHINES));
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadStorage('suppliers', INITIAL_SUPPLIERS));
   const [customers, setCustomers] = useState<Customer[]>(() => loadStorage('customers', INITIAL_CUSTOMERS));
@@ -415,14 +567,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [productionReceipts, setProductionReceipts] = useState<ProductionReceipt[]>(() => loadStorage('productionReceipts', INITIAL_PRODUCTION_RECEIPTS));
   const [customerDeliveries, setCustomerDeliveries] = useState<CustomerDelivery[]>(() => loadStorage('customerDeliveries', INITIAL_CUSTOMER_DELIVERIES));
   const [costAdjustments, setCostAdjustments] = useState<ProductionOrderCostAdjustment[]>(() => loadStorage('costAdjustments', INITIAL_COST_ADJUSTMENTS));
-
-  const [ledgerEntries, setLedgerEntries] = useState<InventoryLedgerEntry[]>(() => {
-    const loaded = loadStorage<InventoryLedgerEntry[]>('ledgerEntries', INITIAL_LEDGER_ENTRIES);
-    const loadedRMs = loadStorage<RawMaterial[]>('rawMaterials', INITIAL_RAW_MATERIALS);
-    const loadedProds = loadStorage<Product[]>('products', INITIAL_PRODUCTS);
-    const loadedRcpts = loadStorage<InventoryReceipt[]>('receipts', INITIAL_RECEIPTS);
-    return healLedgerEntries(loaded, loadedRMs, loadedProds, loadedRcpts);
-  });
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => loadStorage('auditLogs', INITIAL_AUDIT_LOGS));
 
   const [odooConfig, setOdooConfig] = useState<OdooConfig>(() => loadStorage('odooConfig', INITIAL_ODOO_CONFIG));
@@ -541,7 +685,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAuditLogs(prev => [entry, ...prev]);
   };
 
-  // 1. ADD INVENTORY RECEIPT (Receipt / Add Inventory)
+  // ==========================================
+  // WAREHOUSE-LEVEL VALUATION ENGINE (SAP B1 Rule: Item + Warehouse = Independent Valuation Layer)
+  // ==========================================
+  const getItemWarehouseValuation = (itemId: string, warehouseId: string): ItemWarehouseStock => {
+    const item = rawMaterials.find(m => m.id === itemId) || products.find(p => p.id === itemId);
+    if (!item) {
+      return { warehouseId, currentQty: 0, movingAverageCost: 0, totalValue: 0 };
+    }
+    if (item.warehouseStock && item.warehouseStock[warehouseId]) {
+      return item.warehouseStock[warehouseId];
+    }
+    const computedMap = computeItemWarehouseStockMap(item, ledgerEntries, item.defaultWarehouseId);
+    if (computedMap[warehouseId]) {
+      return computedMap[warehouseId];
+    }
+    if (item.defaultWarehouseId === warehouseId) {
+      return {
+        warehouseId,
+        currentQty: item.currentQty || 0,
+        movingAverageCost: item.movingAverageCost || 0,
+        totalValue: item.totalValue || 0
+      };
+    }
+    return { warehouseId, currentQty: 0, movingAverageCost: 0, totalValue: 0 };
+  };
+
+  const getAllItemWarehouseStocks = (itemId: string): ItemWarehouseStock[] => {
+    const item = rawMaterials.find(m => m.id === itemId) || products.find(p => p.id === itemId);
+    if (!item) return [];
+    const whMap = (item.warehouseStock && Object.keys(item.warehouseStock).length > 0)
+      ? item.warehouseStock
+      : computeItemWarehouseStockMap(item, ledgerEntries, item.defaultWarehouseId);
+    return Object.values(whMap);
+  };
+
+  // 1. ADD INVENTORY RECEIPT (Receipt / Add Inventory into specific Warehouse)
   const addReceipt = (data: Omit<InventoryReceipt, 'id' | 'receiptNumber' | 'createdDate' | 'status' | 'landedCostAllocatedEGP'>) => {
     const nextNum = `REC-${new Date().getFullYear()}-${String(receipts.length + 1).padStart(4, '0')}`;
     const newReceipt: InventoryReceipt = {
@@ -553,51 +732,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       landedCostAllocatedEGP: 0
     };
 
-    // Update Item Moving Average Cost:
-    // If Raw Material:
-    let newQty = 0;
-    let newTotalVal = 0;
-    let newMAC = 0;
+    const targetWhId = data.warehouseId;
     const baseQtyToAdd = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
+    const wh = warehouses.find(w => w.id === targetWhId);
+
+    // Calculate updated warehouse stock layer
+    const currentWh = getItemWarehouseValuation(data.itemId, targetWhId);
+    const existingWhQty = currentWh.currentQty || 0;
+    const existingWhVal = currentWh.totalValue || 0;
+
+    const newWhQty = existingWhQty + baseQtyToAdd;
+    const newWhVal = existingWhVal + data.totalValueEGP;
+    const newWhMAC = newWhQty > 0 ? (newWhVal / newWhQty) : data.unitPriceEGP;
+
+    const applyWarehouseStockUpdate = (item: RawMaterial | Product) => {
+      const existingStock = item.warehouseStock || {};
+      const updatedStock: Record<string, ItemWarehouseStock> = {
+        ...existingStock,
+        [targetWhId]: {
+          warehouseId: targetWhId,
+          warehouseName: wh ? (language === 'ar' ? wh.nameAr : wh.nameEn) : targetWhId,
+          currentQty: newWhQty,
+          movingAverageCost: newWhMAC,
+          totalValue: newWhVal
+        }
+      };
+      const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+      const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+      const totalMAC = totalQty > 0 ? totalVal / totalQty : 0;
+      return {
+        ...item,
+        currentQty: totalQty,
+        totalValue: totalVal,
+        movingAverageCost: totalMAC,
+        warehouseStock: updatedStock
+      };
+    };
 
     if (data.itemType === ItemType.RAW_MATERIAL) {
-      setRawMaterials(prev => prev.map(item => {
-        if (item.id === data.itemId) {
-          const oldQty = item.currentQty || 0;
-          const oldVal = item.totalValue || 0;
-          newQty = oldQty + baseQtyToAdd;
-          newTotalVal = oldVal + data.totalValueEGP;
-          newMAC = newQty > 0 ? newTotalVal / newQty : 0;
-          return {
-            ...item,
-            currentQty: newQty,
-            totalValue: newTotalVal,
-            movingAverageCost: newMAC
-          };
-        }
-        return item;
-      }));
+      setRawMaterials(prev => prev.map(item => item.id === data.itemId ? (applyWarehouseStockUpdate(item) as RawMaterial) : item));
     } else {
-      setProducts(prev => prev.map(prod => {
-        if (prod.id === data.itemId) {
-          const oldQty = prod.currentQty || 0;
-          const oldVal = prod.totalValue || 0;
-          newQty = oldQty + baseQtyToAdd;
-          newTotalVal = oldVal + data.totalValueEGP;
-          newMAC = newQty > 0 ? newTotalVal / newQty : 0;
-          return {
-            ...prod,
-            currentQty: newQty,
-            totalValue: newTotalVal,
-            movingAverageCost: newMAC
-          };
-        }
-        return prod;
-      }));
+      setProducts(prev => prev.map(prod => prod.id === data.itemId ? (applyWarehouseStockUpdate(prod) as Product) : prod));
     }
 
-    // Add to Inventory Ledger (Section 36)
-    const wh = warehouses.find(w => w.id === data.warehouseId);
+    // Add to Inventory Ledger with warehouse-specific balance and MAC
     const ledgerEntry: InventoryLedgerEntry = {
       id: 'ledg-' + Date.now(),
       date: newReceipt.createdDate,
@@ -614,11 +792,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uom: data.baseUOM || data.uom || 'KG',
       qtyIn: baseQtyToAdd,
       qtyOut: 0,
-      balanceQty: newQty,
+      balanceQty: newWhQty,
       unitCostEGP: data.unitPriceEGP,
       transactionValueEGP: data.totalValueEGP,
-      runningInventoryValueEGP: newTotalVal,
-      movingAverageCostEGP: newMAC,
+      runningInventoryValueEGP: newWhVal,
+      movingAverageCostEGP: newWhMAC,
       createdBy: currentUser?.fullName || 'System User',
       notes: [
         data.notes,
@@ -631,7 +809,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setReceipts(prev => [newReceipt, ...prev]);
 
-    logAudit('POST_RECEIPT', 'إذن إضافة مخزني', nextNum, `استلام ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToAdd} ${data.baseUOM || ''}) ` : ''}من صنف ${data.itemName} بقيمة ${data.totalValueEGP.toLocaleString('en-US')} ج.م`);
+    logAudit('POST_RECEIPT', 'إذن إضافة مخزني', nextNum, `استلام ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToAdd} ${data.baseUOM || ''}) ` : ''}من صنف ${data.itemName} بقيمة ${data.totalValueEGP.toLocaleString('en-US')} ج.م في ${wh?.nameAr || targetWhId}`);
 
     offlineSyncQueue.enqueueItem({
       actionType: 'GOODS_RECEIPT',
@@ -646,7 +824,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newReceipt;
   };
 
-  // 2. ADD LANDED COST (Section 13: adds value without adding quantity, recalculates MAC)
+  // 2. ADD LANDED COST (Section 13: adds value to specific warehouse without adding quantity, recalculates warehouse MAC)
   const addLandedCost = (data: Omit<LandedCost, 'id' | 'landedCostNumber' | 'createdDate' | 'status'>) => {
     const nextNum = `LC-${new Date().getFullYear()}-${String(landedCosts.length + 1).padStart(4, '0')}`;
     const newLandedCost: LandedCost = {
@@ -678,38 +856,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const itemName = (language === 'ar' ? targetItem?.nameAr : targetItem?.nameEn) || origReceipt?.itemName || data.itemName;
     const itemUom = origReceipt?.baseUOM || origReceipt?.uom || targetItem?.defaultUOM || 'KG';
 
-    // Synchronously compute current quantity and updated value/MAC
-    const currentQty = targetItem?.currentQty ?? (origReceipt?.baseQuantity || origReceipt?.quantity || 0);
-    const oldTotalVal = targetItem?.totalValue ?? (origReceipt?.totalValueEGP || 0);
-    const newTotalVal = oldTotalVal + data.amountEGP;
-    const newMAC = currentQty > 0 ? (newTotalVal / currentQty) : (targetItem?.movingAverageCost || 0);
+    // Synchronously compute current warehouse quantity and updated warehouse value/MAC
+    const curWhStock = getItemWarehouseValuation(data.itemId, targetWhId);
+    const currentWhQty = curWhStock.currentQty > 0 ? curWhStock.currentQty : (origReceipt?.baseQuantity || origReceipt?.quantity || 0);
+    const oldWhVal = curWhStock.totalValue > 0 ? curWhStock.totalValue : (origReceipt?.totalValueEGP || 0);
+    const newWhVal = oldWhVal + data.amountEGP;
+    const newWhMAC = currentWhQty > 0 ? (newWhVal / currentWhQty) : curWhStock.movingAverageCost;
 
-    // Update Item Moving Average Cost (Quantity unchanged, Value increases)
+    const applyLandedCostUpdate = (item: RawMaterial | Product) => {
+      const existingStock = item.warehouseStock || {};
+      const updatedStock: Record<string, ItemWarehouseStock> = {
+        ...existingStock,
+        [targetWhId]: {
+          warehouseId: targetWhId,
+          warehouseName: wh ? (language === 'ar' ? wh.nameAr : wh.nameEn) : targetWhId,
+          currentQty: currentWhQty,
+          movingAverageCost: newWhMAC,
+          totalValue: newWhVal
+        }
+      };
+      const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+      const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+      const totalMAC = totalQty > 0 ? totalVal / totalQty : 0;
+      return {
+        ...item,
+        currentQty: totalQty,
+        totalValue: totalVal,
+        movingAverageCost: totalMAC,
+        warehouseStock: updatedStock
+      };
+    };
+
     if (rawMaterials.some(m => m.id === data.itemId)) {
-      setRawMaterials(prev => prev.map(item => {
-        if (item.id === data.itemId) {
-          return {
-            ...item,
-            totalValue: newTotalVal,
-            movingAverageCost: newMAC
-          };
-        }
-        return item;
-      }));
+      setRawMaterials(prev => prev.map(item => item.id === data.itemId ? (applyLandedCostUpdate(item) as RawMaterial) : item));
     } else {
-      setProducts(prev => prev.map(item => {
-        if (item.id === data.itemId) {
-          return {
-            ...item,
-            totalValue: newTotalVal,
-            movingAverageCost: newMAC
-          };
-        }
-        return item;
-      }));
+      setProducts(prev => prev.map(item => item.id === data.itemId ? (applyLandedCostUpdate(item) as Product) : item));
     }
 
-    // Add to Inventory Ledger (Section 13 & 36)
+    // Add to Inventory Ledger for this specific warehouse layer
     const ledgerEntry: InventoryLedgerEntry = {
       id: 'ledg-' + Date.now(),
       date: newLandedCost.createdDate,
@@ -725,24 +909,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uom: itemUom,
       qtyIn: 0,
       qtyOut: 0,
-      balanceQty: currentQty,
+      balanceQty: currentWhQty,
       unitCostEGP: 0,
       transactionValueEGP: data.amountEGP,
-      runningInventoryValueEGP: newTotalVal,
-      movingAverageCostEGP: newMAC,
+      runningInventoryValueEGP: newWhVal,
+      movingAverageCostEGP: newWhMAC,
       createdBy: currentUser?.fullName || 'System User',
-      notes: `${data.costType} - زيادة القيمة وتحديث متوسط التكلفة بدون زيادة الكمية (+${data.amountEGP.toLocaleString('en-US')} ج.م)`
+      notes: `${data.costType} - زيادة القيمة وتحديث متوسط التكلفة لمستودع ${wh?.nameAr || targetWhId} بدون زيادة الكمية (+${data.amountEGP.toLocaleString('en-US')} ج.م)`
     };
 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setLandedCosts(prev => [newLandedCost, ...prev]);
 
-    logAudit('POST_LANDED_COST', 'تكلفة إنزال', nextNum, `إضافة ${data.amountEGP.toLocaleString('en-US')} ج.م على الصنف ${itemName}. متوسط التكلفة الجديد: ${newMAC.toFixed(3)} ج.م`);
+    logAudit('POST_LANDED_COST', 'تكلفة إنزال', nextNum, `إضافة ${data.amountEGP.toLocaleString('en-US')} ج.م على الصنف ${itemName} في مستودع ${wh?.nameAr || targetWhId}. متوسط التكلفة الجديد: ${newWhMAC.toFixed(3)} ج.م`);
 
     return newLandedCost;
   };
 
-  // 3. INVENTORY ISSUE (Section 14: decreases qty and value using current MAC)
+  // 3. INVENTORY ISSUE (Section 14: decreases qty and value from specific warehouse using current warehouse MAC)
   const addIssue = (data: Omit<InventoryIssue, 'id' | 'issueNumber' | 'createdDate' | 'status'>) => {
     const nextNum = `ISS-${new Date().getFullYear()}-${String(issues.length + 1).padStart(4, '0')}`;
     const newIssue: InventoryIssue = {
@@ -753,25 +937,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'POSTED'
     };
 
-    let newQty = 0;
-    let newTotalVal = 0;
-    const mac = data.movingAverageCostEGP;
+    const fromWhId = data.fromWarehouseId;
+    const wh = warehouses.find(w => w.id === fromWhId);
+    const whStock = getItemWarehouseValuation(data.itemId, fromWhId);
+    const mac = whStock.movingAverageCost > 0 ? whStock.movingAverageCost : (data.movingAverageCostEGP || 0);
     const baseQtyToIssue = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
+    const totalIssueVal = baseQtyToIssue * mac;
 
-    setRawMaterials(prev => prev.map(item => {
-      if (item.id === data.itemId) {
-        newQty = Math.max(0, (item.currentQty || 0) - baseQtyToIssue);
-        newTotalVal = newQty * mac;
-        return {
-          ...item,
-          currentQty: newQty,
-          totalValue: newTotalVal
-        };
-      }
-      return item;
-    }));
+    const newWhQty = Math.max(0, (whStock.currentQty || 0) - baseQtyToIssue);
+    const newWhVal = Math.max(0, (whStock.totalValue || 0) - totalIssueVal);
 
-    const wh = warehouses.find(w => w.id === data.fromWarehouseId);
+    const applyIssueUpdate = (item: RawMaterial | Product) => {
+      const existingStock = item.warehouseStock || {};
+      const updatedStock: Record<string, ItemWarehouseStock> = {
+        ...existingStock,
+        [fromWhId]: {
+          warehouseId: fromWhId,
+          warehouseName: wh ? (language === 'ar' ? wh.nameAr : wh.nameEn) : fromWhId,
+          currentQty: newWhQty,
+          movingAverageCost: mac,
+          totalValue: newWhVal
+        }
+      };
+      const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+      const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+      const totalMAC = totalQty > 0 ? totalVal / totalQty : 0;
+      return {
+        ...item,
+        currentQty: totalQty,
+        totalValue: totalVal,
+        movingAverageCost: totalMAC,
+        warehouseStock: updatedStock
+      };
+    };
+
+    if (rawMaterials.some(m => m.id === data.itemId)) {
+      setRawMaterials(prev => prev.map(item => item.id === data.itemId ? (applyIssueUpdate(item) as RawMaterial) : item));
+    } else {
+      setProducts(prev => prev.map(item => item.id === data.itemId ? (applyIssueUpdate(item) as Product) : item));
+    }
+
     const ledgerEntry: InventoryLedgerEntry = {
       id: 'ledg-' + Date.now(),
       date: newIssue.createdDate,
@@ -788,10 +993,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uom: data.baseUOM || data.uom || 'KG',
       qtyIn: 0,
       qtyOut: baseQtyToIssue,
-      balanceQty: newQty,
+      balanceQty: newWhQty,
       unitCostEGP: mac,
-      transactionValueEGP: data.totalIssueValueEGP,
-      runningInventoryValueEGP: newTotalVal,
+      transactionValueEGP: totalIssueVal,
+      runningInventoryValueEGP: newWhVal,
       movingAverageCostEGP: mac,
       createdBy: currentUser?.fullName || 'System User',
       notes: [
@@ -805,7 +1010,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLedgerEntries(prev => [...prev, ledgerEntry]);
     setIssues(prev => [newIssue, ...prev]);
 
-    logAudit('POST_ISSUE', 'إذن صرف مخزني', nextNum, `صرف ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToIssue} ${data.baseUOM || ''}) ` : ''}من صنف ${data.itemName} بقيمة ${data.totalIssueValueEGP.toLocaleString('en-US')} ج.م`);
+    logAudit('POST_ISSUE', 'إذن صرف مخزني', nextNum, `صرف ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToIssue} ${data.baseUOM || ''}) ` : ''}من صنف ${data.itemName} بقيمة ${totalIssueVal.toLocaleString('en-US')} ج.م من مستودع ${wh?.nameAr || fromWhId}`);
 
     offlineSyncQueue.enqueueItem({
       actionType: 'MATERIAL_ISSUE',
@@ -820,7 +1025,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newIssue;
   };
 
-  // 4. INVENTORY TRANSFER (Section 15: moves stock between warehouses without changing total company inventory value)
+  // 4. INVENTORY TRANSFER (CRITICAL RULE: Transfer uses Source MAC; Recalculates Destination MAC)
   const addTransfer = (data: Omit<InventoryTransfer, 'id' | 'transferNumber' | 'createdDate' | 'status'>) => {
     const nextNum = `TR-${new Date().getFullYear()}-${String(transfers.length + 1).padStart(4, '0')}`;
     const newTransfer: InventoryTransfer = {
@@ -831,78 +1036,134 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'POSTED'
     };
 
-    const fromWh = warehouses.find(w => w.id === data.fromWarehouseId);
-    const toWh = warehouses.find(w => w.id === data.toWarehouseId);
+    const fromWhId = data.fromWarehouseId;
+    const toWhId = data.toWarehouseId;
+    const fromWh = warehouses.find(w => w.id === fromWhId);
+    const toWh = warehouses.find(w => w.id === toWhId);
     const baseQtyToTransfer = data.baseQuantity != null ? data.baseQuantity : (data.quantity * (data.conversionFactor || 1));
 
-    // Ledger 1: Transfer Out
+    // Source Warehouse: Item + Warehouse layer
+    const sourceWhStock = getItemWarehouseValuation(data.itemId, fromWhId);
+    const sourceUnitCost = sourceWhStock.movingAverageCost > 0 ? sourceWhStock.movingAverageCost : (data.unitCostEGP || 0);
+    const transferTotalValue = baseQtyToTransfer * sourceUnitCost;
+
+    const sourceNewQty = Math.max(0, (sourceWhStock.currentQty || 0) - baseQtyToTransfer);
+    const sourceNewVal = Math.max(0, (sourceWhStock.totalValue || 0) - transferTotalValue);
+    const sourceNewMAC = sourceWhStock.movingAverageCost; // Source warehouse unit cost does NOT change!
+
+    // Destination Warehouse: Item + Warehouse layer
+    const destWhStock = getItemWarehouseValuation(data.itemId, toWhId);
+    const destOldQty = destWhStock.currentQty || 0;
+    const destOldVal = destWhStock.totalValue || 0;
+    const destNewQty = destOldQty + baseQtyToTransfer;
+    const destNewVal = destOldVal + transferTotalValue;
+    // New Destination MAC = (Existing Dest Value + Incoming Transfer Value) / (Existing Dest Qty + Incoming Transfer Qty)
+    const destNewMAC = destNewQty > 0 ? (destNewVal / destNewQty) : sourceUnitCost;
+
+    // Update item warehouse stock state
+    const applyTransferUpdate = (item: RawMaterial | Product) => {
+      const existingStock = item.warehouseStock || {};
+      const updatedStock: Record<string, ItemWarehouseStock> = {
+        ...existingStock,
+        [fromWhId]: {
+          warehouseId: fromWhId,
+          warehouseName: fromWh ? (language === 'ar' ? fromWh.nameAr : fromWh.nameEn) : fromWhId,
+          currentQty: sourceNewQty,
+          movingAverageCost: sourceNewMAC,
+          totalValue: sourceNewVal
+        },
+        [toWhId]: {
+          warehouseId: toWhId,
+          warehouseName: toWh ? (language === 'ar' ? toWh.nameAr : toWh.nameEn) : toWhId,
+          currentQty: destNewQty,
+          movingAverageCost: destNewMAC,
+          totalValue: destNewVal
+        }
+      };
+      const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+      const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+      const totalMAC = totalQty > 0 ? totalVal / totalQty : 0;
+      return {
+        ...item,
+        currentQty: totalQty,
+        totalValue: totalVal,
+        movingAverageCost: totalMAC,
+        warehouseStock: updatedStock
+      };
+    };
+
+    const targetItem = rawMaterials.find(m => m.id === data.itemId) || products.find(p => p.id === data.itemId);
+    const itemType = targetItem ? ((targetItem as any).itemType || ItemType.RAW_MATERIAL) : ItemType.RAW_MATERIAL;
+
+    if (rawMaterials.some(m => m.id === data.itemId)) {
+      setRawMaterials(prev => prev.map(item => item.id === data.itemId ? (applyTransferUpdate(item) as RawMaterial) : item));
+    } else {
+      setProducts(prev => prev.map(item => item.id === data.itemId ? (applyTransferUpdate(item) as Product) : item));
+    }
+
+    // Ledger 1: Transfer Out from Source Warehouse
     const ledgerOut: InventoryLedgerEntry = {
       id: 'ledg-out-' + Date.now(),
       date: newTransfer.createdDate,
       itemId: data.itemId,
       itemCode: data.itemCode,
       itemName: data.itemName,
-      itemType: ItemType.RAW_MATERIAL,
-      warehouseId: data.fromWarehouseId,
+      itemType,
+      warehouseId: fromWhId,
       warehouseName: fromWh ? (language === 'ar' ? fromWh.nameAr : fromWh.nameEn) : 'المستودع المصدر',
       locationId: data.fromLocationId,
       transactionType: TransactionType.TRANSFER_OUT,
       documentNumber: nextNum,
-      reference: `تحويل إلى ${toWh ? (language === 'ar' ? toWh.nameAr : toWh.nameEn) : ''}`,
+      reference: `تحويل إلى ${toWh ? (language === 'ar' ? toWh.nameAr : toWh.nameEn) : toWhId}`,
       uom: data.baseUOM || data.uom || 'KG',
       qtyIn: 0,
       qtyOut: baseQtyToTransfer,
-      balanceQty: 0, // balance in source location
-      unitCostEGP: data.unitCostEGP,
-      transactionValueEGP: data.totalValueEGP,
-      runningInventoryValueEGP: 0,
-      movingAverageCostEGP: data.unitCostEGP,
+      balanceQty: sourceNewQty,
+      unitCostEGP: sourceUnitCost,
+      transactionValueEGP: transferTotalValue,
+      runningInventoryValueEGP: sourceNewVal,
+      movingAverageCostEGP: sourceNewMAC,
       createdBy: currentUser?.fullName || 'System User',
       notes: [
         data.notes,
-        data.conversionFactor && data.conversionFactor !== 1
-          ? `تحويل بـ: ${data.quantity} ${data.uom} (= ${baseQtyToTransfer} ${data.baseUOM || ''})`
-          : undefined
+        `صرف تحويل إلى ${toWh?.nameAr || toWhId} بسعر تكلفة المصدر (${sourceUnitCost.toFixed(2)} ج.م)`
       ].filter(Boolean).join(' | ')
     };
 
-    // Ledger 2: Transfer In
+    // Ledger 2: Transfer In to Destination Warehouse
     const ledgerIn: InventoryLedgerEntry = {
       id: 'ledg-in-' + (Date.now() + 1),
       date: newTransfer.createdDate,
       itemId: data.itemId,
       itemCode: data.itemCode,
       itemName: data.itemName,
-      itemType: ItemType.RAW_MATERIAL,
-      warehouseId: data.toWarehouseId,
+      itemType,
+      warehouseId: toWhId,
       warehouseName: toWh ? (language === 'ar' ? toWh.nameAr : toWh.nameEn) : 'المستودع الوجهة',
       locationId: data.toLocationId,
       transactionType: TransactionType.TRANSFER_IN,
       documentNumber: nextNum,
-      reference: `تحويل من ${fromWh ? (language === 'ar' ? fromWh.nameAr : fromWh.nameEn) : ''}`,
+      reference: `تحويل من ${fromWh ? (language === 'ar' ? fromWh.nameAr : fromWh.nameEn) : fromWhId}`,
       uom: data.baseUOM || data.uom || 'KG',
       qtyIn: baseQtyToTransfer,
       qtyOut: 0,
-      balanceQty: baseQtyToTransfer,
-      unitCostEGP: data.unitCostEGP,
-      transactionValueEGP: data.totalValueEGP,
-      runningInventoryValueEGP: data.totalValueEGP,
-      movingAverageCostEGP: data.unitCostEGP,
+      balanceQty: destNewQty,
+      unitCostEGP: sourceUnitCost,
+      transactionValueEGP: transferTotalValue,
+      runningInventoryValueEGP: destNewVal,
+      movingAverageCostEGP: destNewMAC,
       createdBy: currentUser?.fullName || 'System User',
       notes: [
         data.notes,
-        data.conversionFactor && data.conversionFactor !== 1
-          ? `تحويل بـ: ${data.quantity} ${data.uom} (= ${baseQtyToTransfer} ${data.baseUOM || ''})`
-          : undefined
+        `استلام تحويل من ${fromWh?.nameAr || fromWhId} (متوسط تكلفة الوجهة الجديد: ${destNewMAC.toFixed(2)} ج.م)`
       ].filter(Boolean).join(' | ')
     };
 
     setLedgerEntries(prev => [...prev, ledgerOut, ledgerIn]);
     setTransfers(prev => [newTransfer, ...prev]);
 
-    logAudit('POST_TRANSFER', 'تحويل مخزني', nextNum, `تحويل ${data.quantity} ${data.uom} ${data.conversionFactor && data.conversionFactor !== 1 ? `(${baseQtyToTransfer} ${data.baseUOM || ''}) ` : ''}من ${fromWh?.nameAr} إلى ${toWh?.nameAr}`);
+    logAudit('POST_TRANSFER', 'تحويل مخزني', nextNum, `تحويل ${data.quantity} ${data.uom} من ${fromWh?.nameAr} إلى ${toWh?.nameAr} بتكلفة ${sourceUnitCost.toFixed(2)} ج.م (متوسط الوجهة الجديد: ${destNewMAC.toFixed(2)} ج.م)`);
 
-    // Queue in Offline Sync Service Worker queue for Odoo synchronization
     offlineSyncQueue.enqueueItem({
       actionType: 'STOCK_TRANSFER',
       titleAr: `تحويل مخزني: ${data.itemName}`,
@@ -983,20 +1244,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'POSTED'
     };
 
-    // Update raw materials stock and calculate cost
-    let newQty = 0;
-    let newTotalVal = 0;
-    const mac = data.movingAverageCostEGP;
+    // Update raw materials stock and calculate cost for specific warehouse
+    const targetWhId = data.warehouseId;
+    const wh = warehouses.find(w => w.id === targetWhId);
+    const whStock = getItemWarehouseValuation(data.rawMaterialId, targetWhId);
+    const mac = whStock.movingAverageCost > 0 ? whStock.movingAverageCost : data.movingAverageCostEGP;
     const baseQtyToIssue = data.baseQuantity != null ? data.baseQuantity : (data.actualQuantity * (data.conversionFactor || 1));
+    const totalActualCost = baseQtyToIssue * mac;
+
+    const newWhQty = Math.max(0, (whStock.currentQty || 0) - baseQtyToIssue);
+    const newWhVal = Math.max(0, (whStock.totalValue || 0) - totalActualCost);
 
     setRawMaterials(prev => prev.map(item => {
       if (item.id === data.rawMaterialId) {
-        newQty = Math.max(0, (item.currentQty || 0) - baseQtyToIssue);
-        newTotalVal = newQty * mac;
+        const existingStock = item.warehouseStock || {};
+        const updatedStock: Record<string, ItemWarehouseStock> = {
+          ...existingStock,
+          [targetWhId]: {
+            warehouseId: targetWhId,
+            warehouseName: wh ? (language === 'ar' ? wh.nameAr : wh.nameEn) : targetWhId,
+            currentQty: newWhQty,
+            movingAverageCost: mac,
+            totalValue: newWhVal
+          }
+        };
+        const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+        const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+        const totalMAC = totalQty > 0 ? totalVal / totalQty : 0;
         return {
           ...item,
-          currentQty: newQty,
-          totalValue: newTotalVal
+          currentQty: totalQty,
+          totalValue: totalVal,
+          movingAverageCost: totalMAC,
+          warehouseStock: updatedStock
         };
       }
       return item;
@@ -1005,14 +1285,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Update Production Order accumulated material cost
     setProductionOrders(prev => prev.map(order => {
       if (order.id === data.productionOrderId) {
-        const currentMatCost = (order.actualMaterialCostEGP || 0) + data.totalActualCostEGP;
+        const currentMatCost = (order.actualMaterialCostEGP || 0) + totalActualCost;
         const totalProdCost = currentMatCost + (order.additionalCostEGP || 0);
         const updatedMaterials = (order.materials || []).map(mat => {
           if (mat.rawMaterialId === data.rawMaterialId) {
             return {
               ...mat,
               actualIssuedQty: (mat.actualIssuedQty || 0) + baseQtyToIssue,
-              actualCostEGP: (mat.actualCostEGP || 0) + data.totalActualCostEGP
+              actualCostEGP: (mat.actualCostEGP || 0) + totalActualCost
             };
           }
           return mat;
@@ -1030,7 +1310,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     // Ledger Entry for Consumption
-    const wh = warehouses.find(w => w.id === data.warehouseId);
     const ledgerEntry: InventoryLedgerEntry = {
       id: 'ledg-' + Date.now(),
       date: newIssue.date,
@@ -1046,10 +1325,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uom: data.baseUOM || data.uom || 'KG',
       qtyIn: 0,
       qtyOut: baseQtyToIssue,
-      balanceQty: newQty,
+      balanceQty: newWhQty,
       unitCostEGP: mac,
-      transactionValueEGP: data.totalActualCostEGP,
-      runningInventoryValueEGP: newTotalVal,
+      transactionValueEGP: totalActualCost,
+      runningInventoryValueEGP: newWhVal,
       movingAverageCostEGP: mac,
       createdBy: currentUser?.fullName || 'System User',
       notes: [
@@ -1967,6 +2246,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         setUsers,
         seedFullCoverageData,
+        getItemWarehouseValuation,
+        getAllItemWarehouseStocks,
         warehouses,
         locations,
         uoms,
