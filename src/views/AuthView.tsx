@@ -19,6 +19,7 @@ import { UserRole, User } from '../types';
 import { RBAC_ROLE_DEFINITIONS, RoleDefinition } from '../utils/rbac';
 import { authService } from '../services/authService';
 import { useApp } from '../context/AppContext';
+import { CompanyLogo } from '../components/common/CompanyLogo';
 
 interface AuthViewProps {
   initialMode?: 'login' | 'register';
@@ -119,11 +120,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onSuc
     <div className="max-w-4xl mx-auto py-4 space-y-6" id="view-auth-page">
       {/* Top Banner */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-5">
+          <CompanyLogo className="w-14 h-14 text-white shrink-0" light={true} />
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-blue-400 uppercase tracking-wider">
               <Shield className="w-4 h-4" />
-              <span>{isAr ? 'بوابة التحقق والمصادقة الأمنية (JWT Auth)' : 'JWT Authentication Portal'}</span>
+              <span>{isAr ? 'الشركة العربية للدائن - بوابة المصادقة والأمن' : 'Arab Co. For Plastic - Secure JWT Auth Portal'}</span>
             </div>
             <h1 className="text-xl md:text-2xl font-bold text-white">
               {mode === 'login'

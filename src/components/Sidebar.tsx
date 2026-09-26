@@ -26,6 +26,7 @@ import { useConfirm } from './common/ConfirmDialog';
 import { canAccessTab, RBAC_ROLE_DEFINITIONS } from '../utils/rbac';
 import { UserRole } from '../types';
 import { PWAInstallButton } from './common/PWAInstallButton';
+import { CompanyLogo } from './common/CompanyLogo';
 
 export type NavItem =
   | 'dashboard'
@@ -225,17 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
         {/* Brand Header & Close Button */}
         <div className="p-4 border-b border-slate-800/80 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/20 shrink-0">
-              <Factory className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-bold text-sm text-white tracking-wide truncate">
-                {isAr ? 'نظام المخزون والإنتاج' : 'Manufacturing Control'}
-              </h1>
-              <p className="text-[11px] text-slate-400 font-mono truncate">
-                {isAr ? 'متوسط التكلفة + تكامل أودو' : 'Moving Avg Cost & Odoo'}
-              </p>
-            </div>
+            <CompanyLogo className="w-8 h-8 text-white" showText={true} light={true} />
           </div>
 
           {/* Close Sidebar Button (Mobile/Tablet and interactive toggle) */}

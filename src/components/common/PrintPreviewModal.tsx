@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { CompanyLogo } from './CompanyLogo';
 
 export interface PrintPreviewColumn {
   key: string;
@@ -459,14 +460,12 @@ ${summaryCards ? summaryCards.map(s => `${isAr ? s.labelAr : s.labelEn}: ${s.val
               <div className="border-b-2 border-slate-900 pb-4 mb-5 text-slate-900">
                 <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-300">
                   <div className="flex items-start gap-3.5">
-                    <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black shrink-0 print:border print:border-slate-800">
-                      <Factory className="w-7 h-7 text-white" />
-                    </div>
+                    <CompanyLogo className="w-12 h-12 text-slate-900 shrink-0" light={true} />
                     <div>
                       <h1 className="text-base font-extrabold text-slate-950 tracking-tight">
                         {isAr
-                          ? 'الشركة الحديثة للصناعات البلاستيكية والبوليمرات المتطورة'
-                          : 'Modern Plastics & Advanced Industrial Polymers S.A.E.'}
+                          ? 'الشركة العربية للدائن'
+                          : 'Arab Co. For Plastic'}
                       </h1>
                       <p className="text-xs text-slate-600 font-semibold mt-0.5">
                         {isAr

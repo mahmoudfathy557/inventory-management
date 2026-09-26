@@ -18,6 +18,7 @@ import { NotificationCenter } from './common/NotificationCenter';
 import { PWAInstallButton } from './common/PWAInstallButton';
 import { OfflineSyncStatusBadge } from './common/OfflineSyncStatusBadge';
 import { OfflineStatusBanner } from './common/OfflineStatusBanner';
+import { CompanyLogo } from './common/CompanyLogo';
 
 interface HeaderProps {
   currentTab?: NavItem;
@@ -101,6 +102,12 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Menu className="w-5 h-5" />
             </button>
+
+            {/* Desktop Brand Watermark */}
+            <div className="hidden lg:flex items-center gap-1.5 ltr:pr-1 rtl:pl-1">
+              <CompanyLogo className="w-6 h-6" showText={true} light={false} />
+              <span className="text-slate-300 ltr:ml-2 rtl:mr-2">|</span>
+            </div>
 
             {/* Mobile & Tablet View Title Pill */}
             <div className="lg:hidden px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-slate-100/90 border border-slate-200 text-slate-800 text-xs font-extrabold whitespace-nowrap truncate max-w-[90px] min-[390px]:max-w-[120px] sm:max-w-[160px] md:max-w-[200px]">
