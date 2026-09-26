@@ -70,7 +70,7 @@ export const InventoryTransfersView: React.FC = () => {
 
       // 3. Item criteria
       if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
-        const item = rawMaterials.find(m => m.id === t.itemId) || products.find(p => p.id === t.itemId);
+        const item = rawMaterials.find(m => m.id === t.itemId || m.code === t.itemCode) || products.find(p => p.id === t.itemId || p.code === t.itemCode);
         if (!item) return false;
         
         if (erpFilters.itemType) {

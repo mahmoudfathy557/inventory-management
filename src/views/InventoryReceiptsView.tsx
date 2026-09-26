@@ -61,7 +61,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
 
       // 3. Item criteria
       if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
-        const item = rawMaterials.find(m => m.id === r.itemId) || products.find(p => p.id === r.itemId);
+        const item = rawMaterials.find(m => m.id === r.itemId || m.code === r.itemCode) || products.find(p => p.id === r.itemId || p.code === r.itemCode);
         if (!item) return false;
         
         if (erpFilters.itemType) {
@@ -177,7 +177,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
       itemId: selectedItem.id,
       itemCode: selectedItem.code,
       itemName: selectedItem.nameAr,
-      itemType: (selectedItem as any).itemType || ItemType.RAW_MATERIAL,
+      itemType: (selectedItem as any).itemType || (selectedItem as any).productType || ItemType.RAW_MATERIAL,
       warehouseId: selectedWarehouseId,
       quantity,
       uom: activeTransactionUOM,

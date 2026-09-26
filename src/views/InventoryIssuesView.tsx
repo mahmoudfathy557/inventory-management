@@ -53,7 +53,7 @@ export const InventoryIssuesView: React.FC = () => {
 
       // 3. Item criteria
       if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
-        const item = rawMaterials.find(m => m.id === i.itemId) || products.find(p => p.id === i.itemId);
+        const item = rawMaterials.find(m => m.id === i.itemId || m.code === i.itemCode) || products.find(p => p.id === i.itemId || p.code === i.itemCode);
         if (!item) return false;
         
         if (erpFilters.itemType) {

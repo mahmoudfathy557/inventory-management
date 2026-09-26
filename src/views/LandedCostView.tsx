@@ -32,6 +32,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
     addLandedCost,
     cancelTransaction,
     rawMaterials,
+    products,
     currencies,
     currentUser,
     getExchangeRateForDate
@@ -55,12 +56,16 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
   const [notes, setNotes] = useState('');
 
   const selectedReceipt = receipts.find(r => r.id === selectedReceiptId);
-  const relatedItem = rawMaterials.find(m => m.id === selectedReceipt?.itemId);
+  const relatedItem = rawMaterials.find(m => m.id === selectedReceipt?.itemId || m.code === selectedReceipt?.itemCode) ||
+                      products.find(p => p.id === selectedReceipt?.itemId || p.code === selectedReceipt?.itemCode);
 
   const amountEGP = amount * exchangeRate;
-  const currentItemQty = relatedItem?.currentQty || 1000;
-  const currentItemVal = relatedItem?.totalValue || 100000;
-  const currentMAC = relatedItem?.movingAverageCost || 100;
+  const activeUom = selectedReceipt?.uom || (isAr ? 'كجم' : 'KG');
+  
+  // Real quantities & values retrieved dynamically from target inventory receipt
+  const currentItemQty = selectedReceipt ? selectedReceipt.quantity : 1;
+  const currentItemVal = selectedReceipt ? (selectedReceipt.totalValueEGP + (selectedReceipt.landedCostAllocatedEGP || 0)) : 0;
+  const currentMAC = currentItemQty > 0 ? currentItemVal / currentItemQty : 0;
 
   // Rule 13: Value increases by amountEGP, Quantity DOES NOT increase!
   const simulatedNewVal = currentItemVal + amountEGP;
@@ -429,7 +434,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
                 <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-purple-200">
                   <div>
                     <span className="text-slate-500 font-sans">{isAr ? 'الكمية الثابتة:' : 'Quantity:'}</span>
-                    <div className="font-bold text-slate-900">{formatNumber(currentItemQty, language)} كجم</div>
+                    <div className="font-bold text-slate-900">{formatNumber(currentItemQty, language)} {activeUom}</div>
                     <div className="text-[10px] text-emerald-700 font-sans">{isAr ? 'لا تزيد إطلاقاً' : 'Fixed'}</div>
                   </div>
                   <div>
@@ -439,7 +444,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
                   </div>
                   <div>
                     <span className="text-slate-500 font-sans">{isAr ? 'متوسط التكلفة الجديد:' : 'New MAC:'}</span>
-                    <div className="font-bold text-blue-700 text-xs">{formatCurrency(simulatedNewMAC, language)}/كجم</div>
+                    <div className="font-bold text-blue-700 text-xs">{formatCurrency(simulatedNewMAC, language)} / {activeUom}</div>
                     <div className="text-[10px] text-slate-500 font-sans">{isAr ? 'السابق: ' : 'Was: '} {formatCurrency(currentMAC, language)}</div>
                   </div>
                 </div>

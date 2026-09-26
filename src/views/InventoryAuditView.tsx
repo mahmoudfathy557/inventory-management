@@ -130,7 +130,7 @@ export const InventoryAuditView: React.FC = () => {
 
       // 3. Item criteria
       if (erpFilters.itemType || erpFilters.itemGroupId || erpFilters.itemCode || erpFilters.itemDesc) {
-        const item = rawMaterials.find(m => m.id === entry.itemId) || products.find(p => p.id === entry.itemId);
+        const item = rawMaterials.find(m => m.id === entry.itemId || m.code === entry.itemCode) || products.find(p => p.id === entry.itemId || p.code === entry.itemCode);
         if (!item) return false;
         
         if (erpFilters.itemType) {

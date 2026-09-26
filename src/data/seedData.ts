@@ -307,6 +307,22 @@ export const SEED_RAW_MATERIALS: RawMaterial[] = [
 
 export const SEED_PRODUCTS: Product[] = [
   {
+    id: 'fp-788',
+    code: 'FP-788',
+    nameAr: 'PA-G0350 G (منتج تام ممتص)',
+    nameEn: 'PA-G0350 G Finished Product',
+    description: 'PA-G0350 G Finished Goods Product',
+    productType: ItemType.FINISHED_PRODUCT,
+    defaultUOM: 'KG',
+    alternativeUOM: 'KG',
+    defaultWarehouseId: 'wh-fg',
+    active: true,
+    currentQty: 4125,
+    movingAverageCost: 50.6169,
+    totalValue: 208794.713,
+    notes: 'منتج تام تم تصنيعه أو شراؤه مباشرة'
+  },
+  {
     id: 'fp-pipe-50',
     code: 'FP-PIPE-50MM',
     nameAr: 'أنابيب بولي إيثيلين 50 مم ضغط 16 بار (HDPE Pipe 50mm PN16)',
@@ -388,6 +404,19 @@ export const SEED_MACHINES: Machine[] = [
 ];
 
 export const SEED_SUPPLIERS: Supplier[] = [
+  {
+    id: 'sup-horizon',
+    code: 'SUP-HORIZON',
+    nameAr: 'Horizon Additives (إضافات الأفق)',
+    nameEn: 'Horizon Additives',
+    address: 'Free Zone, Alexandria',
+    phone: '+20 3 4812345',
+    email: 'info@horizon.com',
+    taxNumber: '100-888-999',
+    defaultCurrency: 'EGP',
+    paymentTerms: 'COD',
+    active: true
+  },
   {
     id: 'sup-sabic',
     code: 'SUP-001',
@@ -535,6 +564,33 @@ export const SEED_BOMS: BOM[] = [
 ];
 
 export const SEED_RECEIPTS: InventoryReceipt[] = [
+  {
+    id: 'rec-2026-0020',
+    receiptNumber: 'REC-2026-0020',
+    date: '2026-08-15',
+    supplierId: 'sup-horizon',
+    supplierName: 'Horizon Additives',
+    currency: 'EGP',
+    exchangeRate: 1.0,
+    itemId: 'fp-788',
+    itemCode: 'FP-788',
+    itemName: 'PA-G0350 G (منتج تام ممتص)',
+    itemType: ItemType.FINISHED_PRODUCT,
+    warehouseId: 'wh-fg',
+    quantity: 4125,
+    uom: 'KG',
+    unitPrice: 50.6169,
+    unitPriceEGP: 50.6169,
+    totalValueEGP: 208794.713,
+    landedCostAllocatedEGP: 0.0,
+    status: 'POSTED',
+    reference: 'شراء منتج تام REC-2026-0020',
+    notes: 'استلام منتج تام مستورد ومصنف كمخزون معتمد',
+    createdBy: 'م. أحمد كمال',
+    createdDate: '2026-08-15 10:00',
+    approvedBy: 'أ. خالد منصور',
+    approvalDate: '2026-08-15 10:30'
+  },
   {
     id: 'rec-001',
     receiptNumber: 'REC-2026-0001',
@@ -943,6 +999,28 @@ export const SEED_COST_ADJUSTMENTS: ProductionOrderCostAdjustment[] = [
 ];
 
 export const SEED_LEDGER_ENTRIES: InventoryLedgerEntry[] = [
+  {
+    id: 'ledg-0020',
+    date: '2026-08-15 10:00',
+    itemId: 'fp-788',
+    itemCode: 'FP-788',
+    itemName: 'PA-G0350 G (منتج تام ممتص)',
+    itemType: ItemType.FINISHED_PRODUCT,
+    warehouseId: 'wh-fg',
+    warehouseName: 'مستودع المنتجات التامة المعتمدة',
+    transactionType: TransactionType.PURCHASE_RECEIPT,
+    documentNumber: 'REC-2026-0020',
+    reference: 'Horizon Additives',
+    qtyIn: 4125,
+    qtyOut: 0,
+    balanceQty: 4125,
+    unitCostEGP: 50.6169,
+    transactionValueEGP: 208794.713,
+    runningInventoryValueEGP: 208794.713,
+    movingAverageCostEGP: 50.6169,
+    createdBy: 'م. أحمد كمال',
+    notes: 'شراء منتج تام REC-2026-0020'
+  },
   {
     id: 'ledg-001',
     date: '2026-09-18 09:30',
