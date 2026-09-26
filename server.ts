@@ -8,7 +8,9 @@ import { initDatabase, checkDatabase, closeDatabase } from './src/db/index.ts';
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const portArgIndex = process.argv.indexOf('--port');
+  const portFromArg = portArgIndex !== -1 ? Number(process.argv[portArgIndex + 1]) : null;
+  const PORT = portFromArg || 3000;
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -18,7 +20,16 @@ async function startServer() {
     console.warn('Initial database connection note:', err);
   });
 
-  app.use(helmet({ contentSecurityPolicy: false }));
+  // Configure Helmet to allow iFrame embedding in AI Studio and cross-origin resource sharing
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      frameguard: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginOpenerPolicy: false,
+      crossOriginResourcePolicy: false,
+    })
+  );
 
   const corsOrigins = (process.env.CORS_ORIGINS || '')
     .split(',')
@@ -68,13 +79,16 @@ async function startServer() {
     });
   });
 
+  // Serve static public assets (logos, icons, manifests, favicons)
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   // Vite middleware in dev or static files in production
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === 'true' ? false : undefined,
+        hmr: false,
       },
       appType: 'spa',
     });

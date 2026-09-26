@@ -2,6 +2,7 @@ import React from 'react';
 import { Building2, ShieldCheck, Calendar, User, FileText, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatNumber } from '../../utils/formatters';
+import { CompanyLogo } from '../common/CompanyLogo';
 
 interface AuditPrintHeaderProps {
   reportTitleAr: string;
@@ -40,21 +41,24 @@ export const AuditPrintHeader: React.FC<AuditPrintHeaderProps> = ({
     <div className="print-only mb-6 border-b-2 border-slate-900 pb-4 text-slate-900" id="audit-print-header">
       {/* Top Enterprise Banner */}
       <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-300">
-        <div className="space-y-1">
-          <div className="text-base font-extrabold tracking-tight uppercase text-slate-900">
-            {isAr
-              ? 'شركة الصناعات الهندسية والتصنيع المتكامل ش.م.م'
-              : 'Integrated Engineering & Manufacturing Industries S.A.E.'}
-          </div>
-          <div className="text-xs text-slate-600 font-medium">
-            {isAr
-              ? 'قطاع الشؤون المالية وحسابات التكاليف — الإدارة العامة للرقابة والتدقيق المخزني'
-              : 'Financial Affairs & Cost Accounting Sector — General Audit & Inventory Control'}
-          </div>
-          <div className="text-[10px] text-slate-500">
-            {isAr
-              ? 'المنطقة الصناعية الثالثة، مدينة العاشر من رمضان، مصر | س.ت: 48920 | ب.ض: 239-482-109'
-              : '3rd Industrial Zone, 10th of Ramadan City, Egypt | CR: 48920 | Tax ID: 239-482-109'}
+        <div className="flex items-start gap-3.5">
+          <CompanyLogo className="w-12 h-12 text-slate-900 shrink-0" light={true} />
+          <div className="space-y-1">
+            <div className="text-base font-extrabold tracking-tight uppercase text-slate-900">
+              {isAr
+                ? 'الشركة العربية للدائن'
+                : 'Arab Co. For Plastic'}
+            </div>
+            <div className="text-xs text-slate-600 font-medium">
+              {isAr
+                ? 'قطاع الشؤون المالية وحسابات التكاليف — الإدارة العامة للرقابة والتدقيق المخزني'
+                : 'Financial Affairs & Cost Accounting Sector — General Audit & Inventory Control'}
+            </div>
+            <div className="text-[10px] text-slate-500">
+              {isAr
+                ? 'المنطقة الصناعية الثالثة، السادس من أكتوبر | س.ت: 89412 | ب.ض: 239-482-109'
+                : '3rd Industrial Zone, 6th of October City, Egypt | CR: 89412 | Tax ID: 239-482-109'}
+            </div>
           </div>
         </div>
 
