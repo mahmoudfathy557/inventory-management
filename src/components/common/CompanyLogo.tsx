@@ -46,7 +46,7 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({
     });
   }, []);
 
-  const activeLogo = branding.logoUrl || branding.logo;
+  const activeLogo = branding.logoDataUrl || branding.logoUrl || branding.logo;
   const logoAlt = alt || branding.logoAlt;
 
   // Preset responsive maximum bounding sizes (while strictly preserving aspect ratio)

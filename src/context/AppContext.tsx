@@ -503,15 +503,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
     fetch('/api/branding')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
-        if (isMounted && data && data.branding) {
+        if (!isMounted || !data || !data.branding) return;
+
+        // If server has custom branding in database, adopt database branding
+        if (data.hasCustomBranding) {
           setBrandingState(data.branding);
           setCompanyBranding(data.branding);
           saveStorage('company_branding', data.branding);
+        } else {
+          // Server returned defaults. Check if user already has a valid custom logo in local storage:
+          const currentLocal = loadStorage<CompanyBranding>('company_branding', getCompanyBranding());
+          const hasLocalCustom = Boolean(
+            currentLocal &&
+            (currentLocal.logoDataUrl ||
+              (currentLocal.isCustomLogo && currentLocal.logoUrl && !currentLocal.logoUrl.includes('assets/company-logo')))
+          );
+
+          if (hasLocalCustom) {
+            // NEVER overwrite user custom logo with default branding!
+            // Sync local custom logo to persistent database if authenticated
+            const token = authService.getToken();
+            if (token) {
+              updateCompanyBranding(currentLocal).catch(() => {});
+            }
+          } else {
+            setBrandingState(data.branding);
+            setCompanyBranding(data.branding);
+            saveStorage('company_branding', data.branding);
+          }
         }
       })
       .catch(err => {
+        // Network or server error - NEVER overwrite local valid branding with defaults
         console.warn('Could not fetch server branding:', err);
       });
     return () => { isMounted = false; };
@@ -2369,7 +2397,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('SEED_FULL_COVERAGE', 'قاعدة البيانات', 'SEED_100', 'تم تحميل بيانات البذر التجريبية بنسبة تغطية 100% لكافة الأدوار والمستودعات والعمليات');
   };
 
-  const uploadCompanyLogo = async (file: File): Promise<{ success: boolean; logoUrl?: string; error?: string }> => {
+  const uploadCompanyLogo = async (file: File): Promise<{ success: boolean; logoUrl?: string; logoDataUrl?: string; error?: string }> => {
     try {
       const MAX_SIZE = 5 * 1024 * 1024; // 5 MB limit
       if (file.size > MAX_SIZE) {
@@ -2395,7 +2423,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reader.readAsDataURL(file);
       });
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const token = authService.getToken();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
@@ -2418,10 +2446,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: result.error || 'فشل في رفع الشعار.' };
       }
 
+      const resolvedDataUrl = result.logoDataUrl || dataUrl;
       const newBranding: CompanyBranding = result.branding || {
         ...branding,
-        logo: result.logoUrl,
-        logoUrl: result.logoUrl,
+        logo: resolvedDataUrl,
+        logoUrl: resolvedDataUrl,
+        logoDataUrl: resolvedDataUrl,
+        logoFileName: file.name,
+        logoMimeType: file.type,
+        logoSize: file.size,
+        logoUpdatedAt: new Date().toISOString(),
+        isCustomLogo: true,
         updatedAt: new Date().toISOString()
       };
 
@@ -2429,9 +2464,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCompanyBranding(newBranding);
       saveStorage('company_branding', newBranding);
 
-      logAudit('UPLOAD_COMPANY_LOGO', 'هوية الشركة', file.name, `تم رفع وتحديث شعار الشركة الرسمي: ${result.logoUrl}`);
+      logAudit('UPLOAD_COMPANY_LOGO', 'هوية الشركة', file.name, `تم رفع وتحديث شعار الشركة الرسمي: ${file.name}`);
 
-      return { success: true, logoUrl: result.logoUrl };
+      return { success: true, logoUrl: resolvedDataUrl, logoDataUrl: resolvedDataUrl };
     } catch (err: any) {
       console.error('uploadCompanyLogo error:', err);
       return { success: false, error: err?.message || 'حدث خطأ أثناء رفع الشعار.' };
@@ -2440,7 +2475,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const removeCompanyLogo = async (): Promise<{ success: boolean; error?: string }> => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const token = authService.getToken();
       const headers: Record<string, string> = {};
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -2460,6 +2495,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...branding,
         logo: '',
         logoUrl: '',
+        logoDataUrl: '',
+        logoFileName: undefined,
+        logoMimeType: undefined,
+        logoSize: undefined,
+        logoUpdatedAt: undefined,
+        isCustomLogo: false,
         updatedAt: new Date().toISOString()
       };
 
@@ -2478,7 +2519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateCompanyBranding = async (updates: Partial<CompanyBranding>): Promise<void> => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const token = authService.getToken();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };

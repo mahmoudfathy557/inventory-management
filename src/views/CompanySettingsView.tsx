@@ -68,7 +68,7 @@ export const CompanySettingsView: React.FC = () => {
     currentUser?.role === UserRole.ADMIN ||
     currentUser?.role === UserRole.MANAGEMENT_USER;
 
-  const activeLogoUrl = branding.logoUrl || branding.logo;
+  const activeLogoUrl = branding.logoDataUrl || branding.logoUrl || branding.logo;
   const hasActiveLogo = Boolean(activeLogoUrl && activeLogoUrl.trim() !== '');
 
   // Handle file selection from input or drag-and-drop

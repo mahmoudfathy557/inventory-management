@@ -456,30 +456,55 @@ router.post('/seed', async (req: Request, res: Response) => {
 // COMPANY BRANDING & LOGO MANAGEMENT API
 // -------------------------------------------------------------
 
-// Helper to get or fallback branding
-async function getStoredBranding(): Promise<CompanyBranding> {
+// Helper to get or fallback branding from Cloud SQL persistent database
+async function getStoredBranding(): Promise<{ branding: CompanyBranding; hasCustomBranding: boolean }> {
   const db = getDb();
-  if (db && isDbConnected()) {
+  if (db) {
     try {
       const res = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, 'company_branding'));
       if (res.length > 0 && res[0].data) {
-        return { ...DEFAULT_BRANDING, ...(res[0].data as CompanyBranding) };
+        const stored = res[0].data as CompanyBranding;
+        const resolvedLogo = stored.logoDataUrl || stored.logoUrl || stored.logo || DEFAULT_BRANDING.logo;
+        return {
+          branding: {
+            ...DEFAULT_BRANDING,
+            ...stored,
+            logo: resolvedLogo,
+            logoUrl: resolvedLogo,
+            logoDataUrl: stored.logoDataUrl || (stored.logoUrl?.startsWith('data:') ? stored.logoUrl : ''),
+          },
+          hasCustomBranding: true
+        };
       }
     } catch (e: any) {
       console.warn('DB getStoredBranding failed, checking memory:', e?.message);
     }
   }
   if (inMemoryEntities['company_branding']) {
-    return { ...DEFAULT_BRANDING, ...inMemoryEntities['company_branding'] };
+    const stored = inMemoryEntities['company_branding'];
+    const resolvedLogo = stored.logoDataUrl || stored.logoUrl || stored.logo || DEFAULT_BRANDING.logo;
+    return {
+      branding: {
+        ...DEFAULT_BRANDING,
+        ...stored,
+        logo: resolvedLogo,
+        logoUrl: resolvedLogo,
+        logoDataUrl: stored.logoDataUrl || (stored.logoUrl?.startsWith('data:') ? stored.logoUrl : ''),
+      },
+      hasCustomBranding: true
+    };
   }
-  return { ...DEFAULT_BRANDING };
+  return {
+    branding: { ...DEFAULT_BRANDING },
+    hasCustomBranding: false
+  };
 }
 
 // GET /api/branding (Retrieve current official company branding)
 router.get('/branding', async (req: Request, res: Response) => {
   try {
-    const branding = await getStoredBranding();
-    return res.json({ branding, success: true });
+    const { branding, hasCustomBranding } = await getStoredBranding();
+    return res.json({ branding, hasCustomBranding, success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Failed to retrieve branding.' });
   }
@@ -533,31 +558,20 @@ router.post('/branding/logo', authenticateToken, async (req: Request, res: Respo
       });
     }
 
-    // Determine extension
-    let ext = 'jpg';
-    if (mimeType.includes('png')) ext = 'png';
-    else if (mimeType.includes('webp')) ext = 'webp';
-    else if (mimeType.includes('svg')) ext = 'svg';
-    else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = 'jpg';
+    const completeDataUrl = dataUrl.startsWith('data:') ? dataUrl : `data:${mimeType};base64,${base64Data}`;
 
-    // Store in public/uploads/branding
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'branding');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const savedFilename = `company-logo-${Date.now()}.${ext}`;
-    const filePath = path.join(uploadDir, savedFilename);
-    fs.writeFileSync(filePath, buffer);
-
-    const persistentUrl = `/uploads/branding/${savedFilename}`;
-
-    // Update persistent branding in DB & memory
-    const currentBranding = await getStoredBranding();
+    // Update persistent branding in DB with embedded image data
+    const { branding: currentBranding } = await getStoredBranding();
     const updatedBranding: CompanyBranding = {
       ...currentBranding,
-      logo: persistentUrl,
-      logoUrl: persistentUrl,
+      logoDataUrl: completeDataUrl,
+      logoUrl: completeDataUrl,
+      logo: completeDataUrl,
+      logoFileName: originalFilename || 'company-logo',
+      logoMimeType: mimeType,
+      logoSize: buffer.length,
+      logoUpdatedAt: new Date().toISOString(),
+      isCustomLogo: true,
       updatedAt: new Date().toISOString(),
       updatedBy: user.fullName || user.username
     };
@@ -581,7 +595,8 @@ router.post('/branding/logo', authenticateToken, async (req: Request, res: Respo
             }
           });
       } catch (dbErr: any) {
-        console.warn('DB update company_branding error:', dbErr?.message);
+        console.error('DB update company_branding error:', dbErr?.message);
+        throw new Error('فشل حفظ شعار الشركة في قاعدة البيانات: ' + dbErr?.message);
       }
     }
 
@@ -589,8 +604,9 @@ router.post('/branding/logo', authenticateToken, async (req: Request, res: Respo
 
     return res.json({
       success: true,
-      message: 'تم رفع وحفظ شعار الشركة الرسمي بنجاح.',
-      logoUrl: persistentUrl,
+      message: 'تم رفع وحفظ شعار الشركة الرسمي بنجاح في قاعدة البيانات السحابية.',
+      logoDataUrl: completeDataUrl,
+      logoUrl: completeDataUrl,
       branding: updatedBranding
     });
   } catch (err: any) {
@@ -612,11 +628,17 @@ router.delete('/branding/logo', authenticateToken, async (req: Request, res: Res
       });
     }
 
-    const currentBranding = await getStoredBranding();
+    const { branding: currentBranding } = await getStoredBranding();
     const updatedBranding: CompanyBranding = {
       ...currentBranding,
-      logo: '',
+      logoDataUrl: '',
       logoUrl: '',
+      logo: '',
+      logoFileName: undefined,
+      logoMimeType: undefined,
+      logoSize: undefined,
+      logoUpdatedAt: undefined,
+      isCustomLogo: false,
       updatedAt: new Date().toISOString(),
       updatedBy: user.fullName || user.username
     };
@@ -640,7 +662,8 @@ router.delete('/branding/logo', authenticateToken, async (req: Request, res: Res
             }
           });
       } catch (dbErr: any) {
-        console.warn('DB remove logo error:', dbErr?.message);
+        console.error('DB remove logo error:', dbErr?.message);
+        throw new Error('فشل حذف شعار الشركة من قاعدة البيانات: ' + dbErr?.message);
       }
     }
 
@@ -670,9 +693,9 @@ router.put('/branding', authenticateToken, async (req: Request, res: Response) =
     }
 
     const updates = req.body;
-    const current = await getStoredBranding();
+    const { branding: currentBranding } = await getStoredBranding();
     const updatedBranding: CompanyBranding = {
-      ...current,
+      ...currentBranding,
       ...updates,
       updatedAt: new Date().toISOString(),
       updatedBy: user.fullName || user.username

@@ -11,6 +11,12 @@ export interface CompanyBranding {
   alternativeArabicName: string;
   logo: string;
   logoUrl?: string;
+  logoDataUrl?: string;
+  logoFileName?: string;
+  logoMimeType?: string;
+  logoSize?: number;
+  logoUpdatedAt?: string;
+  isCustomLogo?: boolean;
   logoAlt: string;
   sectorAr: string;
   sectorEn: string;
@@ -33,6 +39,8 @@ export const DEFAULT_BRANDING: CompanyBranding = {
   alternativeArabicName: "الشركة العربية للبلاستيك",
   logo: "/assets/company-logo.jpg",
   logoUrl: "/assets/company-logo.jpg",
+  logoDataUrl: "",
+  isCustomLogo: false,
   logoAlt: "الشركة العربية للبلاستيك - Arab Co. For Plastic",
   sectorAr: "قطاع الشؤون المالية وحسابات التكاليف — الإدارة العامة للرقابة والتدقيق المخزني",
   sectorEn: "Financial Affairs & Cost Accounting Sector — General Audit & Inventory Control",
@@ -54,12 +62,13 @@ function loadInitialBranding(): CompanyBranding {
       const stored = localStorage.getItem('mfg_inv_odoo_v2_company_branding');
       if (stored) {
         const parsed = JSON.parse(stored);
+        const resolvedLogo = parsed.logoDataUrl || parsed.logoUrl || parsed.logo || DEFAULT_BRANDING.logo;
         return {
           ...DEFAULT_BRANDING,
           ...parsed,
-          // Ensure logo and logoUrl stay synchronized
-          logo: parsed.logoUrl !== undefined ? parsed.logoUrl : parsed.logo || DEFAULT_BRANDING.logo,
-          logoUrl: parsed.logoUrl !== undefined ? parsed.logoUrl : parsed.logo || DEFAULT_BRANDING.logoUrl,
+          logo: resolvedLogo,
+          logoUrl: resolvedLogo,
+          logoDataUrl: parsed.logoDataUrl || (parsed.logoUrl?.startsWith('data:') ? parsed.logoUrl : ''),
         };
       }
     } catch (e) {
@@ -84,12 +93,31 @@ export function setCompanyBranding(updated: Partial<CompanyBranding>): CompanyBr
     ...updated,
   };
 
-  // Synchronize logo and logoUrl
-  if (updated.logoUrl !== undefined) {
+  // If a custom logoDataUrl is supplied, it becomes the single primary source of truth
+  if (updated.logoDataUrl !== undefined) {
+    merged.logoDataUrl = updated.logoDataUrl;
+    if (updated.logoDataUrl) {
+      merged.logo = updated.logoDataUrl;
+      merged.logoUrl = updated.logoDataUrl;
+      merged.isCustomLogo = true;
+    } else {
+      merged.logo = '';
+      merged.logoUrl = '';
+      merged.isCustomLogo = false;
+    }
+  } else if (updated.logoUrl !== undefined) {
     merged.logo = updated.logoUrl;
     merged.logoUrl = updated.logoUrl;
+    if (updated.logoUrl.startsWith('data:')) {
+      merged.logoDataUrl = updated.logoUrl;
+      merged.isCustomLogo = true;
+    }
   } else if (updated.logo !== undefined) {
     merged.logoUrl = updated.logo;
+    if (updated.logo.startsWith('data:')) {
+      merged.logoDataUrl = updated.logo;
+      merged.isCustomLogo = true;
+    }
   }
 
   companyBranding = merged;
