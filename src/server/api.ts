@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import { getDb, isDbConnected, initDatabase } from '../db/index.ts';
 import { users as usersTable, appEntities as appEntitiesTable, auditLogs as auditLogsTable } from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
@@ -8,6 +10,7 @@ import { INITIAL_USERS } from '../data/initialData.ts';
 import { SEED_USERS } from '../data/seedData.ts';
 import { UserRole, User } from '../types.ts';
 import { RBAC_ROLE_DEFINITIONS, getEffectivePermissions } from '../utils/rbac.ts';
+import { DEFAULT_BRANDING, CompanyBranding } from '../config/branding.ts';
 
 const router = express.Router();
 const JWT_SECRET =
@@ -447,6 +450,267 @@ router.post('/seed', async (req: Request, res: Response) => {
     rolesCovered: Object.keys(RBAC_ROLE_DEFINITIONS),
     users: inMemoryUsers.map(({ passwordHash, ...safe }) => safe)
   });
+});
+
+// -------------------------------------------------------------
+// COMPANY BRANDING & LOGO MANAGEMENT API
+// -------------------------------------------------------------
+
+// Helper to get or fallback branding
+async function getStoredBranding(): Promise<CompanyBranding> {
+  const db = getDb();
+  if (db && isDbConnected()) {
+    try {
+      const res = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, 'company_branding'));
+      if (res.length > 0 && res[0].data) {
+        return { ...DEFAULT_BRANDING, ...(res[0].data as CompanyBranding) };
+      }
+    } catch (e: any) {
+      console.warn('DB getStoredBranding failed, checking memory:', e?.message);
+    }
+  }
+  if (inMemoryEntities['company_branding']) {
+    return { ...DEFAULT_BRANDING, ...inMemoryEntities['company_branding'] };
+  }
+  return { ...DEFAULT_BRANDING };
+}
+
+// GET /api/branding (Retrieve current official company branding)
+router.get('/branding', async (req: Request, res: Response) => {
+  try {
+    const branding = await getStoredBranding();
+    return res.json({ branding, success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to retrieve branding.' });
+  }
+});
+
+// POST /api/branding/logo (Upload official company logo image)
+router.post('/branding/logo', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role as UserRole;
+    const permissions = getEffectivePermissions(role);
+
+    // Only authorized administrators or users with master data permissions can change official logo
+    if (role !== UserRole.ADMIN && !permissions.canManageMasterData && !permissions.canManagePermissions) {
+      return res.status(403).json({
+        error: 'صلاحيات غير كافية: تعديل أو رفع شعار الشركة الرسمي يتطلب صلاحيات مدير النظام (Administrator).'
+      });
+    }
+
+    const { dataUrl, filename: originalFilename, mimeType: providedMimeType } = req.body;
+
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      return res.status(400).json({ error: 'ملف الشعار مطلوب (Data URL / Base64 missing).' });
+    }
+
+    // Determine MIME type and base64 payload
+    let mimeType = providedMimeType || '';
+    let base64Data = dataUrl;
+
+    if (dataUrl.startsWith('data:')) {
+      const matches = dataUrl.match(/^data:([a-zA-Z0-9\/\+.-]+);base64,(.+)$/);
+      if (matches) {
+        mimeType = matches[1].toLowerCase();
+        base64Data = matches[2];
+      }
+    }
+
+    // Validate supported formats: JPG, PNG, WEBP, SVG
+    const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (!validMimes.includes(mimeType)) {
+      return res.status(400).json({
+        error: `صيغة الملف غير مدعومة (${mimeType}). الصيغ المدعومة هي: JPG, JPEG, PNG, WEBP, SVG.`
+      });
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (buffer.length > MAX_SIZE) {
+      return res.status(400).json({
+        error: `حجم الملف (${(buffer.length / (1024 * 1024)).toFixed(2)} MB) يتجاوز الحد الأقصى المسموح به (5 MB).`
+      });
+    }
+
+    // Determine extension
+    let ext = 'jpg';
+    if (mimeType.includes('png')) ext = 'png';
+    else if (mimeType.includes('webp')) ext = 'webp';
+    else if (mimeType.includes('svg')) ext = 'svg';
+    else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = 'jpg';
+
+    // Store in public/uploads/branding
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'branding');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const savedFilename = `company-logo-${Date.now()}.${ext}`;
+    const filePath = path.join(uploadDir, savedFilename);
+    fs.writeFileSync(filePath, buffer);
+
+    const persistentUrl = `/uploads/branding/${savedFilename}`;
+
+    // Update persistent branding in DB & memory
+    const currentBranding = await getStoredBranding();
+    const updatedBranding: CompanyBranding = {
+      ...currentBranding,
+      logo: persistentUrl,
+      logoUrl: persistentUrl,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.fullName || user.username
+    };
+
+    const db = getDb();
+    if (db) {
+      try {
+        await (db.insert(appEntitiesTable as any) as any)
+          .values({
+            entityType: 'company_branding',
+            data: updatedBranding as any,
+            updatedBy: user.fullName || 'admin',
+            updatedAt: new Date()
+          })
+          .onConflictDoUpdate({
+            target: appEntitiesTable.entityType,
+            set: {
+              data: updatedBranding as any,
+              updatedBy: user.fullName || 'admin',
+              updatedAt: new Date()
+            }
+          });
+      } catch (dbErr: any) {
+        console.warn('DB update company_branding error:', dbErr?.message);
+      }
+    }
+
+    inMemoryEntities['company_branding'] = updatedBranding;
+
+    return res.json({
+      success: true,
+      message: 'تم رفع وحفظ شعار الشركة الرسمي بنجاح.',
+      logoUrl: persistentUrl,
+      branding: updatedBranding
+    });
+  } catch (err: any) {
+    console.error('Upload logo error:', err);
+    return res.status(500).json({ error: err?.message || 'فشل في حفظ شعار الشركة.' });
+  }
+});
+
+// DELETE /api/branding/logo (Remove company logo)
+router.delete('/branding/logo', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role as UserRole;
+    const permissions = getEffectivePermissions(role);
+
+    if (role !== UserRole.ADMIN && !permissions.canManageMasterData && !permissions.canManagePermissions) {
+      return res.status(403).json({
+        error: 'صلاحيات غير كافية: إزالة شعار الشركة الرسمي يتطلب صلاحيات مدير النظام (Administrator).'
+      });
+    }
+
+    const currentBranding = await getStoredBranding();
+    const updatedBranding: CompanyBranding = {
+      ...currentBranding,
+      logo: '',
+      logoUrl: '',
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.fullName || user.username
+    };
+
+    const db = getDb();
+    if (db) {
+      try {
+        await (db.insert(appEntitiesTable as any) as any)
+          .values({
+            entityType: 'company_branding',
+            data: updatedBranding as any,
+            updatedBy: user.fullName || 'admin',
+            updatedAt: new Date()
+          })
+          .onConflictDoUpdate({
+            target: appEntitiesTable.entityType,
+            set: {
+              data: updatedBranding as any,
+              updatedBy: user.fullName || 'admin',
+              updatedAt: new Date()
+            }
+          });
+      } catch (dbErr: any) {
+        console.warn('DB remove logo error:', dbErr?.message);
+      }
+    }
+
+    inMemoryEntities['company_branding'] = updatedBranding;
+
+    return res.json({
+      success: true,
+      message: 'تمت إزالة شعار الشركة الرسمي بنجاح.',
+      branding: updatedBranding
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'فشل في إزالة الشعار.' });
+  }
+});
+
+// PUT /api/branding (Update company profile and branding metadata)
+router.put('/branding', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role as UserRole;
+    const permissions = getEffectivePermissions(role);
+
+    if (role !== UserRole.ADMIN && !permissions.canManageMasterData && !permissions.canManagePermissions) {
+      return res.status(403).json({
+        error: 'صلاحيات غير كافية: تعديل بيانات وهوية الشركة يتطلب صلاحيات مدير النظام (Administrator).'
+      });
+    }
+
+    const updates = req.body;
+    const current = await getStoredBranding();
+    const updatedBranding: CompanyBranding = {
+      ...current,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.fullName || user.username
+    };
+
+    const db = getDb();
+    if (db) {
+      try {
+        await (db.insert(appEntitiesTable as any) as any)
+          .values({
+            entityType: 'company_branding',
+            data: updatedBranding as any,
+            updatedBy: user.fullName || 'admin',
+            updatedAt: new Date()
+          })
+          .onConflictDoUpdate({
+            target: appEntitiesTable.entityType,
+            set: {
+              data: updatedBranding as any,
+              updatedBy: user.fullName || 'admin',
+              updatedAt: new Date()
+            }
+          });
+      } catch (dbErr: any) {
+        console.warn('DB update branding error:', dbErr?.message);
+      }
+    }
+
+    inMemoryEntities['company_branding'] = updatedBranding;
+
+    return res.json({
+      success: true,
+      message: 'تم تحديث بيانات الشركة بنجاح.',
+      branding: updatedBranding
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'فشل في تحديث بيانات الشركة.' });
+  }
 });
 
 // GET /api/status (Health check & architecture info)

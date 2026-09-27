@@ -60,6 +60,7 @@ import { CurrencyRatesManager } from '../components/master-data/CurrencyRatesMan
 import { ClearSeedDataModal } from '../components/common/ClearSeedDataModal';
 import { MasterDataSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
+import { CompanySettingsView } from './CompanySettingsView';
 
 export type MasterDataTab =
   | 'categories'
@@ -71,7 +72,8 @@ export type MasterDataTab =
   | 'partners'
   | 'uoms'
   | 'currencies'
-  | 'users';
+  | 'users'
+  | 'branding';
 
 interface MasterDataViewProps {
   initialTab?: MasterDataTab;
@@ -652,6 +654,19 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
             }`}>
               {users.length}
             </span>
+          </button>
+
+          <button
+            data-active={activeSubTab === 'branding'}
+            onClick={() => { setActiveSubTab('branding'); setSearchTerm(''); }}
+            className={`px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+              activeSubTab === 'branding'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-sm ring-2 ring-blue-200'
+                : 'text-slate-600 hover:bg-slate-100 bg-slate-50/80 hover:text-slate-900 border border-slate-200/70'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-blue-300" />
+            <span>{isAr ? 'هوية وشعار الشركة' : 'Company Profile & Logo'}</span>
           </button>
         </div>
       </div>
@@ -1874,6 +1889,11 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
               </div>
             ))}
         </div>
+      )}
+
+      {/* SUB-VIEW 10: COMPANY PROFILE & OFFICIAL BRANDING */}
+      {activeSubTab === 'branding' && (
+        <CompanySettingsView />
       )}
 
       {/* MODALS */}

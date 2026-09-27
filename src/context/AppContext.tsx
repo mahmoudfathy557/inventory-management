@@ -80,6 +80,7 @@ import {
 import { odooService } from '../services/odooService';
 import { authService } from '../services/authService';
 import { offlineSyncQueue } from '../services/offlineSyncQueue';
+import { CompanyBranding, DEFAULT_BRANDING, getCompanyBranding, setCompanyBranding } from '../config/branding';
 import {
   SEED_USERS,
   SEED_WAREHOUSES,
@@ -198,6 +199,12 @@ interface AppContextType {
   deleteCurrency: (id: string) => void;
   saveUser: (user: User) => void;
   deleteUser: (id: string) => void;
+
+  // Company Profile & Official Branding
+  branding: CompanyBranding;
+  uploadCompanyLogo: (file: File) => Promise<{ success: boolean; logoUrl?: string; error?: string }>;
+  removeCompanyLogo: () => Promise<{ success: boolean; error?: string }>;
+  updateCompanyBranding: (newBranding: Partial<CompanyBranding>) => Promise<void>;
 
   // Odoo Actions
   testOdooConnection: () => Promise<boolean>;
@@ -486,6 +493,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return null;
   });
   const [users, setUsers] = useState<User[]>(() => loadStorage<User[]>('users', INITIAL_USERS));
+
+  // Company Profile & Official Branding state (initialized from cache/default)
+  const [branding, setBrandingState] = useState<CompanyBranding>(() => {
+    return loadStorage<CompanyBranding>('company_branding', getCompanyBranding());
+  });
+
+  // Synchronize branding with backend persistent database on mount
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/branding')
+      .then(res => res.json())
+      .then(data => {
+        if (isMounted && data && data.branding) {
+          setBrandingState(data.branding);
+          setCompanyBranding(data.branding);
+          saveStorage('company_branding', data.branding);
+        }
+      })
+      .catch(err => {
+        console.warn('Could not fetch server branding:', err);
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>(() => loadStorage('warehouses', INITIAL_WAREHOUSES));
   const [locations, setLocations] = useState<ProductionLocation[]>(() => loadStorage('locations', INITIAL_LOCATIONS));
@@ -2339,6 +2369,146 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('SEED_FULL_COVERAGE', 'قاعدة البيانات', 'SEED_100', 'تم تحميل بيانات البذر التجريبية بنسبة تغطية 100% لكافة الأدوار والمستودعات والعمليات');
   };
 
+  const uploadCompanyLogo = async (file: File): Promise<{ success: boolean; logoUrl?: string; error?: string }> => {
+    try {
+      const MAX_SIZE = 5 * 1024 * 1024; // 5 MB limit
+      if (file.size > MAX_SIZE) {
+        return {
+          success: false,
+          error: `حجم الملف (${(file.size / (1024 * 1024)).toFixed(2)} MB) يتجاوز الحد الأقصى المسموح به (5 MB).`
+        };
+      }
+
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml'];
+      if (!validTypes.includes(file.type.toLowerCase())) {
+        return {
+          success: false,
+          error: `صيغة الملف غير مدعومة (${file.type}). الصيغ المقبولة: JPG, PNG, WEBP, SVG.`
+        };
+      }
+
+      // Convert file to Base64 Data URL for upload and instantaneous local preview
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/branding/logo', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          dataUrl,
+          filename: file.name,
+          mimeType: file.type
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        return { success: false, error: result.error || 'فشل في رفع الشعار.' };
+      }
+
+      const newBranding: CompanyBranding = result.branding || {
+        ...branding,
+        logo: result.logoUrl,
+        logoUrl: result.logoUrl,
+        updatedAt: new Date().toISOString()
+      };
+
+      setBrandingState(newBranding);
+      setCompanyBranding(newBranding);
+      saveStorage('company_branding', newBranding);
+
+      logAudit('UPLOAD_COMPANY_LOGO', 'هوية الشركة', file.name, `تم رفع وتحديث شعار الشركة الرسمي: ${result.logoUrl}`);
+
+      return { success: true, logoUrl: result.logoUrl };
+    } catch (err: any) {
+      console.error('uploadCompanyLogo error:', err);
+      return { success: false, error: err?.message || 'حدث خطأ أثناء رفع الشعار.' };
+    }
+  };
+
+  const removeCompanyLogo = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/branding/logo', {
+        method: 'DELETE',
+        headers
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        return { success: false, error: result.error || 'فشل في إزالة الشعار.' };
+      }
+
+      const newBranding: CompanyBranding = result.branding || {
+        ...branding,
+        logo: '',
+        logoUrl: '',
+        updatedAt: new Date().toISOString()
+      };
+
+      setBrandingState(newBranding);
+      setCompanyBranding(newBranding);
+      saveStorage('company_branding', newBranding);
+
+      logAudit('REMOVE_COMPANY_LOGO', 'هوية الشركة', 'LOGO_REMOVAL', 'تمت إزالة شعار الشركة الرسمي وتعيين الحالة بدون شعار.');
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('removeCompanyLogo error:', err);
+      return { success: false, error: err?.message || 'حدث خطأ أثناء إزالة الشعار.' };
+    }
+  };
+
+  const updateCompanyBranding = async (updates: Partial<CompanyBranding>): Promise<void> => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/branding', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updates)
+      });
+
+      const result = await response.json();
+      const updated: CompanyBranding = result.branding || { ...branding, ...updates };
+
+      setBrandingState(updated);
+      setCompanyBranding(updated);
+      saveStorage('company_branding', updated);
+
+      logAudit('UPDATE_COMPANY_BRANDING', 'بيانات الشركة', 'BRANDING_CONFIG', 'تم تحديث بيانات وهوية الشركة المؤسسية.');
+    } catch (err) {
+      console.error('updateCompanyBranding error:', err);
+      const updated: CompanyBranding = { ...branding, ...updates };
+      setBrandingState(updated);
+      setCompanyBranding(updated);
+      saveStorage('company_branding', updated);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -2350,6 +2520,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout,
         users,
         setUsers,
+        branding,
+        uploadCompanyLogo,
+        removeCompanyLogo,
+        updateCompanyBranding,
         seedFullCoverageData,
         getItemWarehouseValuation,
         getAllItemWarehouseStocks,

@@ -19,6 +19,7 @@ import {
   LogOut,
   KeyRound,
   Shield,
+  Building2,
   X
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -42,6 +43,7 @@ export type NavItem =
   | 'reports'
   | 'odoo-sync'
   | 'users'
+  | 'settings'
   | 'auth';
 
 interface SidebarMenuItem {
@@ -194,6 +196,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
           labelAr: 'المستخدمين والصلاحيات',
           labelEn: 'Users & Permissions',
           icon: Users
+        },
+        {
+          id: 'settings',
+          labelAr: 'إعدادات وهوية الشركة',
+          labelEn: 'Company Settings & Logo',
+          icon: Building2
         },
         {
           id: 'auth',

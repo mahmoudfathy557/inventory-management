@@ -22,8 +22,10 @@ export const AuditPrintHeader: React.FC<AuditPrintHeaderProps> = ({
   activeFilterSummaryAr,
   activeFilterSummaryEn
 }) => {
-  const { language, currentUser } = useApp();
+  const { language, currentUser, branding } = useApp();
   const isAr = language === 'ar';
+
+  const activeBranding = branding || companyBranding;
 
   const currentDate = new Date().toLocaleDateString(isAr ? 'ar-EG' : 'en-US', {
     year: 'numeric',
@@ -43,22 +45,22 @@ export const AuditPrintHeader: React.FC<AuditPrintHeaderProps> = ({
       {/* Top Enterprise Banner */}
       <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-300">
         <div className="flex items-start gap-3.5">
-          <CompanyLogo size="md" className="shrink-0" alt={companyBranding.logoAlt} />
+          <CompanyLogo size="md" className="shrink-0" alt={activeBranding.logoAlt} />
           <div className="space-y-1">
             <div className="text-base font-extrabold tracking-tight uppercase text-slate-900">
               {isAr
-                ? companyBranding.arabicName
-                : companyBranding.companyName}
+                ? activeBranding.arabicName
+                : activeBranding.companyName}
             </div>
             <div className="text-xs text-slate-600 font-medium">
               {isAr
-                ? companyBranding.sectorAr
-                : companyBranding.sectorEn}
+                ? activeBranding.sectorAr
+                : activeBranding.sectorEn}
             </div>
             <div className="text-[10px] text-slate-500">
               {isAr
-                ? companyBranding.addressAr
-                : companyBranding.addressEn}
+                ? activeBranding.addressAr
+                : activeBranding.addressEn}
             </div>
           </div>
         </div>

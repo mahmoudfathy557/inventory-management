@@ -24,6 +24,7 @@ import { CustomerDeliveriesView } from './views/CustomerDeliveriesView';
 import { InventoryAuditView } from './views/InventoryAuditView';
 import { OdooIntegrationView } from './views/OdooIntegrationView';
 import { MasterDataView } from './views/MasterDataView';
+import { CompanySettingsView } from './views/CompanySettingsView';
 import { AuthView } from './views/AuthView';
 
 const VALID_NAV_ITEMS: NavItem[] = [
@@ -40,6 +41,7 @@ const VALID_NAV_ITEMS: NavItem[] = [
   'reports',
   'odoo-sync',
   'users',
+  'settings',
   'auth'
 ];
 
@@ -271,6 +273,8 @@ const MainAppContent: React.FC = () => {
                 {(currentTab === 'master-data' || currentTab === 'users') && (
                   <MasterDataView initialTab={currentTab === 'users' ? 'users' : undefined} />
                 )}
+
+                {currentTab === 'settings' && <CompanySettingsView />}
 
                 {currentTab === 'auth' && (
                   <AuthView

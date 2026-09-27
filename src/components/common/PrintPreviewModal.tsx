@@ -123,7 +123,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   defaultOrientation = 'landscape',
   onExportCSV
 }) => {
-  const { language, currentUser } = useApp();
+  const { language, currentUser, branding } = useApp();
   const isAr = language === 'ar';
 
   // Preview display settings
@@ -178,8 +178,26 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     minute: '2-digit'
   });
 
-  const handleTriggerPrint = () => {
-    window.print();
+  const handleTriggerPrint = async () => {
+    // Ensure all images (including official uploaded company logo) are fully decoded and rendered
+    const sheetEl = document.getElementById('printable-report-sheet');
+    if (sheetEl) {
+      const images = sheetEl.getElementsByTagName('img');
+      const loadPromises = Array.from(images).map(img => {
+        if (img.complete) {
+          return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+        }
+        return new Promise<void>(resolve => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      });
+      await Promise.all(loadPromises);
+    }
+    // Microtask buffer to guarantee repaint
+    setTimeout(() => {
+      window.print();
+    }, 60);
   };
 
   const handleCopySummary = () => {
@@ -296,6 +314,18 @@ ${summaryCards ? summaryCards.map(s => `${isAr ? s.labelAr : s.labelEn}: ${s.val
                 <span className="hidden md:inline">{isAr ? 'تصدير CSV' : 'CSV'}</span>
               </button>
             )}
+
+            {/* Export PDF Button */}
+            <button
+              type="button"
+              id="btn-trigger-pdf-now"
+              onClick={handleTriggerPrint}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer border border-slate-700"
+              title={isAr ? 'تصدير وحفظ المستند بصيغة PDF' : 'Export and save document as PDF'}
+            >
+              <FileText className="w-4 h-4 text-rose-400" />
+              <span>{isAr ? 'تصدير PDF' : 'PDF Export'}</span>
+            </button>
 
             {/* Primary Print Button */}
             <button
@@ -461,22 +491,22 @@ ${summaryCards ? summaryCards.map(s => `${isAr ? s.labelAr : s.labelEn}: ${s.val
               <div className="border-b-2 border-slate-900 pb-4 mb-5 text-slate-900">
                 <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-300">
                   <div className="flex items-start gap-3.5">
-                    <CompanyLogo size="md" className="shrink-0" alt={companyBranding.logoAlt} />
+                    <CompanyLogo size="md" className="shrink-0" alt={(branding || companyBranding).logoAlt} />
                     <div>
                       <h1 className="text-base font-extrabold text-slate-950 tracking-tight">
                         {isAr
-                          ? companyBranding.arabicName
-                          : companyBranding.companyName}
+                          ? (branding || companyBranding).arabicName
+                          : (branding || companyBranding).companyName}
                       </h1>
                       <p className="text-xs text-slate-600 font-semibold mt-0.5">
                         {isAr
-                          ? companyBranding.sectorAr
-                          : companyBranding.sectorEn}
+                          ? (branding || companyBranding).sectorAr
+                          : (branding || companyBranding).sectorEn}
                       </p>
                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                         {isAr
-                          ? companyBranding.addressAr
-                          : companyBranding.addressEn}
+                          ? (branding || companyBranding).addressAr
+                          : (branding || companyBranding).addressEn}
                       </p>
                     </div>
                   </div>

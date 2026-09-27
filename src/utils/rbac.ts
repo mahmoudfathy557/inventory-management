@@ -242,6 +242,10 @@ export function canAccessTab(role: UserRole, tabId: string): boolean {
       // Strictly Super Admin
       return role === UserRole.ADMIN;
 
+    case 'settings':
+      // All authenticated users can view company profile & official logo (edits restricted inside view)
+      return true;
+
     default:
       return true;
   }

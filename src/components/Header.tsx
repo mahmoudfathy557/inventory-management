@@ -81,6 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
     reports: { ar: 'التقارير والأستاذ', en: 'Reports & Ledger' },
     'odoo-sync': { ar: 'تكامل أودو ERP', en: 'Odoo ERP Sync' },
     users: { ar: 'الصلاحيات', en: 'User RBAC' },
+    settings: { ar: 'إعدادات وهوية الشركة', en: 'Company Settings & Logo' },
     auth: { ar: 'تسجيل الدخول', en: 'Authentication' }
   };
 
