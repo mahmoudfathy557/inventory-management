@@ -3,6 +3,37 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, type PluginOption } from 'vite';
 
+const devVirtualPwaPlugin: PluginOption = {
+  name: 'virtual-pwa-register',
+  resolveId(id: string) {
+    if (id === 'virtual:pwa-register') {
+      return '\0virtual:pwa-register';
+    }
+  },
+  load(id: string) {
+    if (id === '\0virtual:pwa-register') {
+      return `
+        export function registerSW(options = {}) {
+          if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+              navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then(reg => {
+                  if (options.onRegisteredSW) options.onRegisteredSW('/sw.js', reg);
+                })
+                .catch(err => {
+                  if (options.onRegisterError) options.onRegisterError(err);
+                });
+            });
+          }
+          return async (reloadPage = false) => {
+            if (reloadPage) window.location.reload();
+          };
+        }
+      `;
+    }
+  },
+};
+
 export default defineConfig(async ({ command }) => {
   const plugins: PluginOption[] = [
     react(),
@@ -89,7 +120,10 @@ export default defineConfig(async ({ command }) => {
       );
     } catch (e) {
       console.warn('VitePWA build plugin note:', e);
+      plugins.push(devVirtualPwaPlugin);
     }
+  } else {
+    plugins.push(devVirtualPwaPlugin);
   }
 
   return {

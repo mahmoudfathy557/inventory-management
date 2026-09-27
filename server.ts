@@ -1,3 +1,7 @@
+// Ensure global scope is clean for ESM loaders under tsx
+delete (globalThis as any).__dirname;
+delete (globalThis as any).__filename;
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
