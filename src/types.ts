@@ -168,8 +168,12 @@ export interface User {
   fullName: string;
   email: string;
   role: UserRole;
+  department?: string;
   active: boolean;
   permissionOverrides?: Partial<PermissionSet>;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Warehouse {

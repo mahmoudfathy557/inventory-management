@@ -6,11 +6,16 @@
 
 export async function parseApiResponse<T = any>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type') || '';
+  const raw = await response.text();
+
+  // Handle Cloud Run / upstream ingress proxy warming up message
+  if (raw.includes('no available server') || raw.trim() === 'no available server') {
+    throw new Error('الخادم في وضع الاستعداد السحابي، جاري الاتصال... يرجى إعادة المحاولة.');
+  }
 
   if (!response.ok) {
-    const raw = await response.text();
-    let errorMessage = `API request failed (${response.status}): ${raw}`;
-    if (contentType.includes('application/json')) {
+    let errorMessage = `API request failed (${response.status}): ${raw.slice(0, 120)}`;
+    if (contentType.includes('application/json') || raw.trim().startsWith('{') || raw.trim().startsWith('[')) {
       try {
         const parsed = JSON.parse(raw);
         if (parsed.error) {
@@ -23,12 +28,11 @@ export async function parseApiResponse<T = any>(response: Response): Promise<T> 
     throw new Error(errorMessage);
   }
 
-  if (!contentType.includes('application/json')) {
-    const raw = await response.text();
-    throw new Error(`Expected JSON but received (${response.status}): ${raw.slice(0, 300)}`);
+  try {
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    throw new Error(`استجابة غير صالحة من الخادم: ${raw.slice(0, 100)}`);
   }
-
-  return (await response.json()) as T;
 }
 
 export async function safeFetchJson<T = any>(

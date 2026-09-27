@@ -94,17 +94,28 @@ async function startServer() {
   app.use(express.static(path.join(process.cwd(), 'public')));
 
   // Vite middleware in dev or static files in production
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: false,
-      },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
+  const isBundle = typeof __filename !== 'undefined' && (__filename.endsWith('.cjs') || __filename.includes('dist'));
+  const isProduction = process.env.NODE_ENV === 'production' || isBundle;
+
+  let viteMounted = false;
+  if (!isProduction) {
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: false,
+        },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+      viteMounted = true;
+    } catch (viteErr) {
+      console.warn('Vite dev middleware initialization warning, falling back to static dist:', viteErr);
+    }
+  }
+
+  if (isProduction || !viteMounted) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(
       '/assets',
