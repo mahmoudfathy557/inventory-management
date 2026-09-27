@@ -81,6 +81,7 @@ import { odooService } from '../services/odooService';
 import { authService } from '../services/authService';
 import { offlineSyncQueue } from '../services/offlineSyncQueue';
 import { CompanyBranding, DEFAULT_BRANDING, getCompanyBranding, setCompanyBranding } from '../config/branding';
+import { parseApiResponse, safeFetchWithRetry } from '../utils/apiClient';
 import {
   SEED_USERS,
   SEED_WAREHOUSES,
@@ -499,11 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Synchronize branding with backend persistent database on mount
   useEffect(() => {
     let isMounted = true;
-    fetch('/api/branding')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
+    safeFetchWithRetry<{ branding: CompanyBranding; hasCustomBranding: boolean }>('/api/branding')
       .then(data => {
         if (!isMounted || !data || !data.branding) return;
 
@@ -537,7 +534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(err => {
         // Network or server error - NEVER overwrite local valid branding with defaults
-        console.warn('Could not fetch server branding:', err);
+        console.warn('Could not fetch server branding:', err?.message || err);
       });
     return () => { isMounted = false; };
   }, []);
@@ -2438,10 +2435,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       });
 
-      const result = await response.json();
-      if (!response.ok) {
-        return { success: false, error: result.error || 'فشل في رفع الشعار.' };
-      }
+      const result = await parseApiResponse<{ success: boolean; logoUrl?: string; logoDataUrl?: string; branding?: CompanyBranding; error?: string }>(response);
 
       const resolvedDataUrl = result.logoDataUrl || dataUrl;
       const newBranding: CompanyBranding = result.branding || {
@@ -2483,10 +2477,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers
       });
 
-      const result = await response.json();
-      if (!response.ok) {
-        return { success: false, error: result.error || 'فشل في إزالة الشعار.' };
-      }
+      const result = await parseApiResponse<{ success: boolean; branding?: CompanyBranding; error?: string }>(response);
 
       const newBranding: CompanyBranding = result.branding || {
         ...branding,
@@ -2530,7 +2521,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify(updates)
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse<{ success: boolean; branding?: CompanyBranding; error?: string }>(response);
       const updated: CompanyBranding = result.branding || { ...branding, ...updates };
 
       setBrandingState(updated);

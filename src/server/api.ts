@@ -20,10 +20,20 @@ if (!JWT_SECRET) {
 }
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
+// GET /api/health (Standard Health Check endpoint)
+router.get('/health', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({
+    ok: true,
+    server: 'available',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Seed default accounts in memory or database
 let inMemoryUsers = INITIAL_USERS.map((u: User) => ({
   ...u,
-  passwordHash: bcrypt.hashSync('Password123!', 8),
+  passwordHash: bcrypt.hashSync(u.role === UserRole.ADMIN ? 'Admin@2026#Arab' : 'Password123!', 8),
   department: RBAC_ROLE_DEFINITIONS[u.role]?.department || 'General',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()

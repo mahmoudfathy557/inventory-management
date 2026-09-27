@@ -7,6 +7,7 @@
  */
 
 import { OdooConfig, OdooSyncLog, Customer, Product, RawMaterial, ProductionOrder } from '../types';
+import { parseApiResponse } from '../utils/apiClient';
 
 export interface OdooAuthResult {
   success: boolean;
@@ -69,8 +70,8 @@ class OdooService {
 
       clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const json = await response.json();
+      try {
+        const json = await parseApiResponse<any>(response);
         const serverVersion = json?.result?.server_version || '17.0 Community/Enterprise';
 
         // Now authenticate with credentials
@@ -89,19 +90,17 @@ class OdooService {
           })
         });
 
-        if (authRes.ok) {
-          const authJson = await authRes.json();
-          const uid = authJson?.result;
-          if (uid && typeof uid === 'number') {
-            return {
-              success: true,
-              uid,
-              serverVersion,
-              message: `تم الاتصال بنجاح بخادم أودو (${serverVersion}) - UID: ${uid}`
-            };
-          }
+        const authJson = await parseApiResponse<any>(authRes);
+        const uid = authJson?.result;
+        if (uid && typeof uid === 'number') {
+          return {
+            success: true,
+            uid,
+            serverVersion,
+            message: `تم الاتصال بنجاح بخادم أودو (${serverVersion}) - UID: ${uid}`
+          };
         }
-      }
+      } catch {}
     } catch {
       // Network/CORS fallback or offline demonstration mode
     }
@@ -156,8 +155,8 @@ class OdooService {
       });
       clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const data = await response.json();
+      try {
+        const data = await parseApiResponse<any>(response);
         if (Array.isArray(data?.result) && data.result.length > 0) {
           const imported: Customer[] = data.result.map((p: any) => ({
             id: `odoo-${p.id}`,
@@ -181,7 +180,7 @@ class OdooService {
             importedCustomers: imported
           };
         }
-      }
+      } catch {}
     } catch {
       // Fallback
     }

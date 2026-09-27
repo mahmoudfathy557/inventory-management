@@ -1,5 +1,6 @@
 import { UserRole, PermissionSet, User } from '../types';
 import { getEffectivePermissions, RBAC_ROLE_DEFINITIONS, RoleDefinition } from '../utils/rbac';
+import { parseApiResponse } from '../utils/apiClient';
 
 export interface AuthState {
   user: User | null;
@@ -69,11 +70,7 @@ export const authService = {
       body: JSON.stringify({ emailOrUsername, password }),
     });
 
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Login failed.');
-    }
-
+    const data = await parseApiResponse<{ user: User; token: string; permissions: PermissionSet }>(res);
     this.setAuth(data.token, data.user);
     return data;
   },
@@ -85,11 +82,7 @@ export const authService = {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Registration failed.');
-    }
-
+    const data = await parseApiResponse<{ user: User; token: string; permissions: PermissionSet }>(res);
     this.setAuth(data.token, data.user);
     return data;
   },
@@ -102,11 +95,11 @@ export const authService = {
       const res = await fetch('/api/auth/me', {
         headers: this.getAuthHeaders(),
       });
-      if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
         this.clearAuth();
         return null;
       }
-      const data = await res.json();
+      const data = await parseApiResponse<{ user: User }>(res);
       return data.user;
     } catch {
       return this.getStoredUser();
@@ -120,7 +113,7 @@ export const authService = {
         headers: this.getAuthHeaders(),
         body: JSON.stringify(state),
       });
-      const data = await res.json();
+      const data = await parseApiResponse<{ success: boolean; isPostgresConnected: boolean }>(res);
       return { success: !!data.success, isPostgresConnected: !!data.isPostgresConnected };
     } catch {
       return { success: false, isPostgresConnected: false };
@@ -130,8 +123,7 @@ export const authService = {
   async checkBackendStatus(): Promise<{ connected: boolean; status: string; postgres: boolean }> {
     try {
       const res = await fetch('/api/status');
-      if (!res.ok) return { connected: false, status: 'offline', postgres: false };
-      const data = await res.json();
+      const data = await parseApiResponse<any>(res);
       return {
         connected: true,
         status: data.status,

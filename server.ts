@@ -42,20 +42,36 @@ async function startServer() {
 
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 1000,
+    limit: 2000,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: req => req.originalUrl.startsWith('/api/health'),
-    message: { error: 'Too many requests. Please try again later.' },
+    handler: (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    },
   });
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 20,
+    limit: 200,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skipSuccessfulRequests: true,
-    message: { error: 'Too many authentication attempts. Please try again later.' },
+    handler: (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.status(429).json({ error: 'Too many authentication attempts. Please try again later.' });
+    },
+  });
+
+  // Fast health endpoint before any rate limiters or routers
+  app.get('/api/health', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json({
+      ok: true,
+      server: 'available',
+      timestamp: new Date().toISOString()
+    });
   });
 
   app.use('/api/auth', authLimiter);
@@ -63,11 +79,6 @@ async function startServer() {
 
   // Mount API router FIRST before Vite/static middlewares
   app.use('/api', apiRouter);
-
-  // Liveness check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
 
   // Readiness check (verifies database connectivity)
   app.get('/api/health/ready', async (req, res) => {
