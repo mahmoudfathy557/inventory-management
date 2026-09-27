@@ -1,108 +1,166 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from './schema.ts';
 
-declare global {
-  var _postgresPool: Pool | undefined;
+let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let sqlClient: postgres.Sql | null = null;
+let isConnected = false;
+
+function getPostgresOptions(): postgres.Options<{}> | string | null {
+  // If Cloud SQL instance is provisioned (e.g. in AI Studio / Cloud Run), connect via unix socket
+  if (process.env.SQL_HOST) {
+    return {
+      host: process.env.SQL_HOST,
+      user: process.env.SQL_USER,
+      password: process.env.SQL_PASSWORD,
+      database: process.env.SQL_DB_NAME,
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      onnotice: () => {},
+    };
+  }
+
+  // Fallback to DATABASE_URL only if it is not pointing to an unreachable docker-compose alias
+  const dbUrl = process.env.DATABASE_URL;
+  if (dbUrl && !dbUrl.includes('@postgres:')) {
+    return dbUrl;
+  }
+
+  return null;
 }
 
-export const createPool = () => {
-  if (!global._postgresPool) {
-    if (process.env.SQL_HOST) {
-      global._postgresPool = new Pool({
-        host: process.env.SQL_HOST,
-        user: process.env.SQL_USER,
-        password: process.env.SQL_PASSWORD,
-        database: process.env.SQL_DB_NAME,
-        max: 10,
-        connectionTimeoutMillis: 15000,
-      });
-    } else if (process.env.DATABASE_URL) {
-      global._postgresPool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        max: 10,
-        connectionTimeoutMillis: 15000,
-      });
-    }
-
-    if (global._postgresPool) {
-      global._postgresPool.on('error', (err) => {
-        console.error('Unexpected error on idle SQL pool client:', err);
-      });
-    }
-  }
-  return global._postgresPool;
-};
-
-const pool = createPool();
-export const db = pool ? drizzle(pool, { schema }) : null;
-
 export function getDb() {
-  if (!db) {
-    const p = createPool();
-    return p ? drizzle(p, { schema }) : null;
+  const options = getPostgresOptions();
+  if (!options) {
+    return null;
   }
-  return db;
+
+  if (!dbInstance) {
+    try {
+      sqlClient = typeof options === 'string'
+        ? postgres(options, {
+            max: 10,
+            idle_timeout: 20,
+            connect_timeout: 10,
+            onnotice: () => {},
+          })
+        : postgres(options);
+      dbInstance = drizzle(sqlClient, { schema });
+    } catch (err) {
+      console.warn('PostgreSQL connection initialization note:', err);
+      return null;
+    }
+  }
+
+  return dbInstance;
 }
 
 export function isDbConnected(): boolean {
-  return pool !== null && pool !== undefined;
+  return isConnected;
 }
 
-export async function checkDatabase(timeoutMs = 5000): Promise<boolean> {
-  const p = createPool();
-  if (!p) return false;
+export async function checkDatabase(timeoutMs = 3000): Promise<boolean> {
+  const client = sqlClient;
+  if (!client) return false;
   try {
-    const res = await p.query('SELECT 1');
-    return res.rowCount !== null && res.rowCount > 0;
-  } catch (err) {
+    await Promise.race([
+      client`SELECT 1`,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Database health check timed out')), timeoutMs)
+      ),
+    ]);
+    isConnected = true;
+    return true;
+  } catch {
+    isConnected = false;
     return false;
   }
 }
 
 export async function closeDatabase(): Promise<void> {
-  if (global._postgresPool) {
-    await global._postgresPool.end();
-    global._postgresPool = undefined;
+  const client = sqlClient;
+  if (!client) return;
+  try {
+    await client.end({ timeout: 5 });
+  } finally {
+    sqlClient = null;
+    dbInstance = null;
+    isConnected = false;
   }
 }
 
 export async function initDatabase() {
-  const p = createPool();
-  if (!p) {
-    console.log('ℹ️ No database credentials found.');
+  const db = getDb();
+  if (!db || !sqlClient) {
+    console.log('ℹ️ Running in memory/client storage mode (Cloud SQL / PostgreSQL not configured).');
     return;
   }
-  try {
-    await p.query('SELECT 1');
-    console.log(' Connected to PostgreSQL Cloud SQL database successfully via Drizzle.');
 
-    // Ensure persistent administrator user exists in Cloud SQL users table
-    const checkAdmin = await p.query(
-      "SELECT id FROM users WHERE username = 'admin' OR email = 'admin@arabplastic.local'"
-    );
-    if (checkAdmin.rowCount === 0) {
-      const bcrypt = await import('bcryptjs');
-      const hash = bcrypt.default.hashSync('Admin@2026#Arab', 10);
-      await p.query(
-        `INSERT INTO users (id, username, full_name, email, password_hash, role, department, active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-         ON CONFLICT (email) DO NOTHING`,
-        [
-          'user-admin',
-          'admin',
-          'أ. محمود فتحي (مدير النظام العام)',
-          'admin@arabplastic.local',
-          hash,
-          'ADMIN',
-          'IT / Operations',
-          true
-        ]
-      );
-      console.log(' Verified and created persistent ADMIN account in Cloud SQL users table.');
+  try {
+    // Quick test ping
+    await Promise.race([
+      sqlClient`SELECT 1`,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Initial database ping timed out')), 5000)
+      ),
+    ]);
+
+    // Test connection & ensure tables exist automatically
+    try {
+      await sqlClient`
+        CREATE TABLE IF NOT EXISTS users (
+          id text PRIMARY KEY,
+          username text NOT NULL UNIQUE,
+          full_name text NOT NULL,
+          email text NOT NULL UNIQUE,
+          password_hash text NOT NULL,
+          role text NOT NULL DEFAULT 'INVENTORY_USER',
+          department text,
+          active boolean NOT NULL DEFAULT true,
+          permission_overrides jsonb,
+          last_login_at timestamp,
+          created_at timestamp NOT NULL DEFAULT NOW(),
+          updated_at timestamp NOT NULL DEFAULT NOW()
+        );
+      `;
+
+      await sqlClient`
+        CREATE TABLE IF NOT EXISTS app_entities (
+          id serial PRIMARY KEY,
+          entity_type text NOT NULL UNIQUE,
+          data jsonb NOT NULL,
+          updated_by text,
+          updated_at timestamp NOT NULL DEFAULT NOW()
+        );
+      `;
+
+      await sqlClient`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id text PRIMARY KEY,
+          date text NOT NULL,
+          time text NOT NULL,
+          user_id text,
+          user_name text NOT NULL,
+          user_role text,
+          action text NOT NULL,
+          document_type text NOT NULL,
+          document_number text NOT NULL,
+          old_value text,
+          new_value text,
+          details text NOT NULL,
+          created_at timestamp NOT NULL DEFAULT NOW()
+        );
+      `;
+    } catch (tableErr: any) {
+      console.warn('Note on table creation (tables may already exist):', tableErr?.message || tableErr);
     }
+
+    isConnected = true;
+    console.log(' Connected to PostgreSQL database successfully via Drizzle.');
   } catch (err: any) {
-    console.warn('⚠️ Could not connect to PostgreSQL Cloud SQL:', err?.message || err);
+    isConnected = false;
+    console.warn('⚠️ Could not connect to PostgreSQL (will retry on next request):', err?.message || err);
   }
 }
 

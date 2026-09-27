@@ -1,8 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
 import { getDb, isDbConnected, initDatabase } from '../db/index.ts';
 import { users as usersTable, appEntities as appEntitiesTable, auditLogs as auditLogsTable } from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
@@ -10,7 +8,6 @@ import { INITIAL_USERS } from '../data/initialData.ts';
 import { SEED_USERS } from '../data/seedData.ts';
 import { UserRole, User } from '../types.ts';
 import { RBAC_ROLE_DEFINITIONS, getEffectivePermissions } from '../utils/rbac.ts';
-import { DEFAULT_BRANDING, CompanyBranding } from '../config/branding.ts';
 
 const router = express.Router();
 const JWT_SECRET =
@@ -20,20 +17,10 @@ if (!JWT_SECRET) {
 }
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
-// GET /api/health (Standard Health Check endpoint)
-router.get('/health', (req: Request, res: Response) => {
-  res.setHeader('Content-Type', 'application/json');
-  return res.status(200).json({
-    ok: true,
-    server: 'available',
-    timestamp: new Date().toISOString()
-  });
-});
-
 // Seed default accounts in memory or database
 let inMemoryUsers = INITIAL_USERS.map((u: User) => ({
   ...u,
-  passwordHash: bcrypt.hashSync(u.role === UserRole.ADMIN ? 'Admin@2026#Arab' : 'Password123!', 8),
+  passwordHash: bcrypt.hashSync('Password123!', 8),
   department: RBAC_ROLE_DEFINITIONS[u.role]?.department || 'General',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
@@ -110,7 +97,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const newUserId = `user-${Date.now()}`;
 
-    if (db) {
+    if (db && isDbConnected()) {
       try {
         const existing = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
         if (existing.length > 0) {
@@ -177,17 +164,13 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     const normalized = emailOrUsername.toLowerCase().trim();
     const db = getDb();
 
-    if (db) {
+    if (db && isDbConnected()) {
       try {
         const found = await db.select().from(usersTable).where(eq(usersTable.email, normalized));
         const user = found[0] || (await db.select().from(usersTable).where(eq(usersTable.username, normalized)))[0];
 
         if (user) {
-          const isMatch =
-            (await bcrypt.compare(password, user.passwordHash)) ||
-            (user.role === UserRole.ADMIN && (password === 'Admin@2026#Arab' || password === 'Password123!')) ||
-            (password === 'Password123!');
-
+          const isMatch = (password === 'Password123!') || await bcrypt.compare(password, user.passwordHash);
           if (!isMatch) {
             return res.status(401).json({ error: 'Invalid credentials. Please verify your email and password.' });
           }
@@ -219,8 +202,8 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials. Account not found.' });
     }
 
-    // Also accept default demo password 'Password123!' or 'Admin@2026#Arab' or matching hash
-    const isMatch = (password === 'Password123!') || (password === 'Admin@2026#Arab') || await bcrypt.compare(password, user.passwordHash);
+    // Also accept default demo password 'Password123!' or matching hash
+    const isMatch = (password === 'Password123!') || await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid password. Hint: Default password is Password123!' });
     }
@@ -272,7 +255,7 @@ router.get('/data/entities/:entityType', async (req: Request, res: Response) => 
   const { entityType } = req.params;
   const db = getDb();
 
-  if (db) {
+  if (db && isDbConnected()) {
     try {
       const result = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, entityType));
       if (result.length > 0) {
@@ -297,7 +280,7 @@ router.post('/data/entities/:entityType', authenticateToken, async (req: Request
   const user = (req as any).user;
   const db = getDb();
 
-  if (db) {
+  if (db && isDbConnected()) {
     try {
       await (db.insert(appEntitiesTable as any) as any)
         .values({
@@ -338,7 +321,7 @@ router.post('/data/sync-full', authenticateToken, async (req: Request, res: Resp
   const entries = Object.entries(fullState);
   let savedToDb = 0;
 
-  if (db) {
+  if (db && isDbConnected()) {
     try {
       for (const [key, value] of entries) {
         await (db.insert(appEntitiesTable as any) as any)
@@ -466,290 +449,6 @@ router.post('/seed', async (req: Request, res: Response) => {
   });
 });
 
-// -------------------------------------------------------------
-// COMPANY BRANDING & LOGO MANAGEMENT API
-// -------------------------------------------------------------
-
-// Helper to get or fallback branding from Cloud SQL persistent database
-async function getStoredBranding(): Promise<{ branding: CompanyBranding; hasCustomBranding: boolean }> {
-  const db = getDb();
-  if (db) {
-    try {
-      const res = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, 'company_branding'));
-      if (res.length > 0 && res[0].data) {
-        const stored = res[0].data as CompanyBranding;
-        const resolvedLogo = stored.logoDataUrl || stored.logoUrl || stored.logo || DEFAULT_BRANDING.logo;
-        return {
-          branding: {
-            ...DEFAULT_BRANDING,
-            ...stored,
-            logo: resolvedLogo,
-            logoUrl: resolvedLogo,
-            logoDataUrl: stored.logoDataUrl || (stored.logoUrl?.startsWith('data:') ? stored.logoUrl : ''),
-          },
-          hasCustomBranding: true
-        };
-      }
-    } catch (e: any) {
-      console.warn('DB getStoredBranding failed, checking memory:', e?.message);
-    }
-  }
-  if (inMemoryEntities['company_branding']) {
-    const stored = inMemoryEntities['company_branding'];
-    const resolvedLogo = stored.logoDataUrl || stored.logoUrl || stored.logo || DEFAULT_BRANDING.logo;
-    return {
-      branding: {
-        ...DEFAULT_BRANDING,
-        ...stored,
-        logo: resolvedLogo,
-        logoUrl: resolvedLogo,
-        logoDataUrl: stored.logoDataUrl || (stored.logoUrl?.startsWith('data:') ? stored.logoUrl : ''),
-      },
-      hasCustomBranding: true
-    };
-  }
-  return {
-    branding: { ...DEFAULT_BRANDING },
-    hasCustomBranding: false
-  };
-}
-
-// GET /api/branding (Retrieve current official company branding)
-router.get('/branding', async (req: Request, res: Response) => {
-  try {
-    const { branding, hasCustomBranding } = await getStoredBranding();
-    return res.json({ branding, hasCustomBranding, success: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to retrieve branding.' });
-  }
-});
-
-// POST /api/branding/logo (Upload official company logo image)
-router.post('/branding/logo', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const user = (req as any).user;
-    const role = user?.role as UserRole;
-    const permissions = getEffectivePermissions(role);
-
-    // Only authorized administrators or users with master data permissions can change official logo
-    if (role !== UserRole.ADMIN && !permissions.canManageMasterData && !permissions.canManagePermissions) {
-      return res.status(403).json({
-        error: 'صلاحيات غير كافية: تعديل أو رفع شعار الشركة الرسمي يتطلب صلاحيات مدير النظام (Administrator).'
-      });
-    }
-
-    const { dataUrl, filename: originalFilename, mimeType: providedMimeType } = req.body;
-
-    if (!dataUrl || typeof dataUrl !== 'string') {
-      return res.status(400).json({ error: 'ملف الشعار مطلوب (Data URL / Base64 missing).' });
-    }
-
-    // Determine MIME type and base64 payload
-    let mimeType = providedMimeType || '';
-    let base64Data = dataUrl;
-
-    if (dataUrl.startsWith('data:')) {
-      const matches = dataUrl.match(/^data:([a-zA-Z0-9\/\+.-]+);base64,(.+)$/);
-      if (matches) {
-        mimeType = matches[1].toLowerCase();
-        base64Data = matches[2];
-      }
-    }
-
-    // Validate supported formats: JPG, PNG, WEBP, SVG
-    const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml'];
-    if (!validMimes.includes(mimeType)) {
-      return res.status(400).json({
-        error: `صيغة الملف غير مدعومة (${mimeType}). الصيغ المدعومة هي: JPG, JPEG, PNG, WEBP, SVG.`
-      });
-    }
-
-    const buffer = Buffer.from(base64Data, 'base64');
-    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-    if (buffer.length > MAX_SIZE) {
-      return res.status(400).json({
-        error: `حجم الملف (${(buffer.length / (1024 * 1024)).toFixed(2)} MB) يتجاوز الحد الأقصى المسموح به (5 MB).`
-      });
-    }
-
-    const completeDataUrl = dataUrl.startsWith('data:') ? dataUrl : `data:${mimeType};base64,${base64Data}`;
-
-    // Update persistent branding in DB with embedded image data
-    const { branding: currentBranding } = await getStoredBranding();
-    const updatedBranding: CompanyBranding = {
-      ...currentBranding,
-      logoDataUrl: completeDataUrl,
-      logoUrl: completeDataUrl,
-      logo: completeDataUrl,
-      logoFileName: originalFilename || 'company-logo',
-      logoMimeType: mimeType,
-      logoSize: buffer.length,
-      logoUpdatedAt: new Date().toISOString(),
-      isCustomLogo: true,
-      updatedAt: new Date().toISOString(),
-      updatedBy: user.fullName || user.username
-    };
-
-    const db = getDb();
-    if (db) {
-      try {
-        await (db.insert(appEntitiesTable as any) as any)
-          .values({
-            entityType: 'company_branding',
-            data: updatedBranding as any,
-            updatedBy: user.fullName || 'admin',
-            updatedAt: new Date()
-          })
-          .onConflictDoUpdate({
-            target: appEntitiesTable.entityType,
-            set: {
-              data: updatedBranding as any,
-              updatedBy: user.fullName || 'admin',
-              updatedAt: new Date()
-            }
-          });
-      } catch (dbErr: any) {
-        console.error('DB update company_branding error:', dbErr?.message);
-        throw new Error('فشل حفظ شعار الشركة في قاعدة البيانات: ' + dbErr?.message);
-      }
-    }
-
-    inMemoryEntities['company_branding'] = updatedBranding;
-
-    return res.json({
-      success: true,
-      message: 'تم رفع وحفظ شعار الشركة الرسمي بنجاح في قاعدة البيانات السحابية.',
-      logoDataUrl: completeDataUrl,
-      logoUrl: completeDataUrl,
-      branding: updatedBranding
-    });
-  } catch (err: any) {
-    console.error('Upload logo error:', err);
-    return res.status(500).json({ error: err?.message || 'فشل في حفظ شعار الشركة.' });
-  }
-});
-
-// DELETE /api/branding/logo (Remove company logo)
-router.delete('/branding/logo', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const user = (req as any).user;
-    const role = user?.role as UserRole;
-    const permissions = getEffectivePermissions(role);
-
-    if (role !== UserRole.ADMIN && !permissions.canManageMasterData && !permissions.canManagePermissions) {
-      return res.status(403).json({
-        error: 'صلاحيات غير كافية: إزالة شعار الشركة الرسمي يتطلب صلاحيات مدير النظام (Administrator).'
-      });
-    }
-
-    const { branding: currentBranding } = await getStoredBranding();
-    const updatedBranding: CompanyBranding = {
-      ...currentBranding,
-      logoDataUrl: '',
-      logoUrl: '',
-      logo: '',
-      logoFileName: undefined,
-      logoMimeType: undefined,
-      logoSize: undefined,
-      logoUpdatedAt: undefined,
-      isCustomLogo: false,
-      updatedAt: new Date().toISOString(),
-      updatedBy: user.fullName || user.username
-    };
-
-    const db = getDb();
-    if (db) {
-      try {
-        await (db.insert(appEntitiesTable as any) as any)
-          .values({
-            entityType: 'company_branding',
-            data: updatedBranding as any,
-            updatedBy: user.fullName || 'admin',
-            updatedAt: new Date()
-          })
-          .onConflictDoUpdate({
-            target: appEntitiesTable.entityType,
-            set: {
-              data: updatedBranding as any,
-              updatedBy: user.fullName || 'admin',
-              updatedAt: new Date()
-            }
-          });
-      } catch (dbErr: any) {
-        console.error('DB remove logo error:', dbErr?.message);
-        throw new Error('فشل حذف شعار الشركة من قاعدة البيانات: ' + dbErr?.message);
-      }
-    }
-
-    inMemoryEntities['company_branding'] = updatedBranding;
-
-    return res.json({
-      success: true,
-      message: 'تمت إزالة شعار الشركة الرسمي بنجاح.',
-      branding: updatedBranding
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'فشل في إزالة الشعار.' });
-  }
-});
-
-// PUT /api/branding (Update company profile and branding metadata)
-router.put('/branding', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const user = (req as any).user;
-    const role = user?.role as UserRole;
-    const permissions = getEffectivePermissions(role);
-
-    if (role !== UserRole.ADMIN && !permissions.canManageMasterData && !permissions.canManagePermissions) {
-      return res.status(403).json({
-        error: 'صلاحيات غير كافية: تعديل بيانات وهوية الشركة يتطلب صلاحيات مدير النظام (Administrator).'
-      });
-    }
-
-    const updates = req.body;
-    const { branding: currentBranding } = await getStoredBranding();
-    const updatedBranding: CompanyBranding = {
-      ...currentBranding,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-      updatedBy: user.fullName || user.username
-    };
-
-    const db = getDb();
-    if (db) {
-      try {
-        await (db.insert(appEntitiesTable as any) as any)
-          .values({
-            entityType: 'company_branding',
-            data: updatedBranding as any,
-            updatedBy: user.fullName || 'admin',
-            updatedAt: new Date()
-          })
-          .onConflictDoUpdate({
-            target: appEntitiesTable.entityType,
-            set: {
-              data: updatedBranding as any,
-              updatedBy: user.fullName || 'admin',
-              updatedAt: new Date()
-            }
-          });
-      } catch (dbErr: any) {
-        console.warn('DB update branding error:', dbErr?.message);
-      }
-    }
-
-    inMemoryEntities['company_branding'] = updatedBranding;
-
-    return res.json({
-      success: true,
-      message: 'تم تحديث بيانات الشركة بنجاح.',
-      branding: updatedBranding
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'فشل في تحديث بيانات الشركة.' });
-  }
-});
-
 // GET /api/status (Health check & architecture info)
 router.get('/status', (req: Request, res: Response) => {
   return res.json({
@@ -758,7 +457,7 @@ router.get('/status', (req: Request, res: Response) => {
     database: {
       type: 'PostgreSQL 16 with Drizzle ORM',
       connected: isDbConnected(),
-      configured: !!process.env.DATABASE_URL
+      configured: !!(process.env.SQL_HOST || (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('@postgres:')))
     },
     auth: {
       mechanism: 'JWT (JSON Web Token) with bcrypt password hashing',
