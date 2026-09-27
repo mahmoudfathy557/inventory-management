@@ -6,16 +6,19 @@ import {
   Layers,
   TrendingDown,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatNumber, exportToCSV } from '../../utils/formatters';
+import { PrintPreviewModal } from '../common/PrintPreviewModal';
 
 export const MaterialConsumptionReport: React.FC = () => {
-  const { language, productionOrders } = useApp();
+  const { language, productionOrders, branding } = useApp();
   const isAr = language === 'ar';
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Flatten consumption lines across production orders
   const consumptionLines = productionOrders.flatMap(po => {
@@ -64,6 +67,8 @@ export const MaterialConsumptionReport: React.FC = () => {
 
   const totalActualCost = filteredLines.reduce((acc, l) => acc + l.actualCost, 0);
   const totalVarianceVal = filteredLines.reduce((acc, l) => acc + l.varianceVal, 0);
+  const totalPlannedCost = filteredLines.reduce((acc, l) => acc + l.plannedCost, 0);
+  const netVarianceVal = totalVarianceVal;
 
   const handleExport = () => {
     const headers = [
@@ -120,14 +125,25 @@ export const MaterialConsumptionReport: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-          title={isAr ? 'تصدير استهلاك الخامات إلى ملف CSV' : 'Export Material Consumption to CSV'}
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPrintPreview(true)}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+            title={isAr ? 'معاينة وطباعة تقرير استهلاك الخامات مع شعار الشركة' : 'Print / Preview Material Consumption with Company Logo'}
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>{isAr ? 'طباعة ومعاينة التقرير' : 'Print / Preview'}</span>
+          </button>
+
+          <button
+            onClick={handleExport}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+            title={isAr ? 'تصدير استهلاك الخامات إلى ملف CSV' : 'Export Material Consumption to CSV'}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Highlights */}
@@ -225,6 +241,60 @@ export const MaterialConsumptionReport: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Material Consumption Print Preview Modal */}
+      <PrintPreviewModal
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        reportTitleAr="تقرير استهلاك المواد الخام وفروقات التصنيع (Section 32)"
+        reportTitleEn="Raw Material Consumption & Production Variances Report (Section 32)"
+        reportSubtitleAr="كشف رسمي معتمد بالاستهلاك الصناعي للخامات ومقارنة المخطط بالفعلي وفروقات التكلفة"
+        reportSubtitleEn="Certified Official Statement of Industrial Material Consumption, Planned vs Actual and Cost Variances"
+        documentNumber={`MAT-CONS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`}
+        categoryLabelAr="استهلاك خامات تشغيل"
+        categoryLabelEn="Industrial Consumption"
+        filterScopeAr={`عدد بنود الصرف: ${filteredLines.length}`}
+        filterScopeEn={`Consumption Lines: ${filteredLines.length}`}
+        summaryCards={[
+          { labelAr: 'إجمالي خطوط الصرف', labelEn: 'Total Lines', value: filteredLines.length, isNumber: true, variant: 'default' },
+          { labelAr: 'إجمالي التكلفة المخططة', labelEn: 'Planned Material Cost', value: totalPlannedCost, isCurrency: true, variant: 'info' },
+          { labelAr: 'إجمالي التكلفة الفعلية', labelEn: 'Actual Material Cost', value: totalActualCost, isCurrency: true, variant: 'default' },
+          { labelAr: 'صافي فارق تكلفة الخامات', labelEn: 'Net Cost Variance', value: netVarianceVal, isCurrency: true, variant: netVarianceVal > 0 ? 'danger' : 'success' }
+        ]}
+        financialSummary={[
+          { labelAr: 'إجمالي التكلفة الفعلية المنصرفة', labelEn: 'Total Actual Cost Issued', value: totalActualCost },
+          { labelAr: 'صافي وفورات / زيادة استهلاك الخامات', labelEn: 'Net Variance (Savings / Excess)', value: netVarianceVal }
+        ]}
+        notes={
+          isAr
+            ? 'تم إعداد هذا التقرير بناءً على أوامر التشغيل المعتمدة ومتوسط التكلفة المتحرك (MAC) المسجل في كارتة الصنف.'
+            : 'Generated based on released production orders and current Moving Average Costing recorded in the item master ledger.'
+        }
+        columns={[
+          { key: 'order', headerAr: 'أمر التشغيل', headerEn: 'Order No', isMono: true, width: '100px' },
+          { key: 'product', headerAr: 'المنتج التام', headerEn: 'Finished Product' },
+          { key: 'material', headerAr: 'الخامة المستهلكة', headerEn: 'Raw Material' },
+          { key: 'uom', headerAr: 'الوحدة', headerEn: 'UOM', align: 'center', width: '60px' },
+          { key: 'planned', headerAr: 'مخطط', headerEn: 'Planned', align: 'right', isMono: true },
+          { key: 'actual', headerAr: 'فعلي', headerEn: 'Actual', align: 'right', isMono: true },
+          { key: 'variance', headerAr: 'فارق الكمية', headerEn: 'Variance Qty', align: 'right', isMono: true },
+          { key: 'mac', headerAr: 'متوسط التكلفة', headerEn: 'MAC (EGP)', align: 'right', isMono: true },
+          { key: 'cost', headerAr: 'التكلفة الفعلية (ج.م)', headerEn: 'Actual Cost', align: 'right', isMono: true },
+          { key: 'costVar', headerAr: 'فارق التكلفة (ج.م)', headerEn: 'Variance Val', align: 'right', isMono: true }
+        ]}
+        rows={filteredLines.map(l => [
+          l.orderNumber,
+          l.productName,
+          `${l.materialName} (${l.materialCode})`,
+          l.matUom,
+          formatNumber(l.plannedQty, language),
+          formatNumber(l.actualQty, language),
+          formatNumber(l.varianceQty, language),
+          formatCurrency(l.macCost, language),
+          formatCurrency(l.actualCost, language),
+          formatCurrency(l.varianceVal, language)
+        ])}
+      />
     </div>
   );
 };

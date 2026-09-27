@@ -7,17 +7,20 @@ import {
   User,
   Filter,
   Layers,
-  Sparkles
+  Sparkles,
+  Printer
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { exportToCSV } from '../../utils/formatters';
+import { PrintPreviewModal } from '../common/PrintPreviewModal';
 
 export const GlobalAuditReport: React.FC = () => {
-  const { language, auditLogs } = useApp();
+  const { language, auditLogs, branding } = useApp();
   const isAr = language === 'ar';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAction, setSelectedAction] = useState('ALL');
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const filteredLogs = auditLogs.filter(log => {
     if (selectedAction !== 'ALL' && !log.action.includes(selectedAction)) return false;
@@ -69,14 +72,25 @@ export const GlobalAuditReport: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleExport}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-          title={isAr ? 'تصدير سجل التدقيق إلى ملف CSV' : 'Export Audit Log to CSV'}
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPrintPreview(true)}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+            title={isAr ? 'معاينة وطباعة تقرير التدقيق الرسمي مع شعار الشركة' : 'Print / Preview Audit Report with Company Logo'}
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>{isAr ? 'طباعة ومعاينة التقرير' : 'Print / Preview'}</span>
+          </button>
+
+          <button
+            onClick={handleExport}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+            title={isAr ? 'تصدير سجل التدقيق إلى ملف CSV' : 'Export Audit Log to CSV'}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -154,6 +168,46 @@ export const GlobalAuditReport: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Global Audit Print Preview Modal */}
+      <PrintPreviewModal
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        reportTitleAr="سجل التدقيق الشامل للعمليات والتغييرات (Section 35)"
+        reportTitleEn="Global Operations & Changes Audit Log Report (Section 35)"
+        reportSubtitleAr="كشف رسمي معتمد بالتدقيق المحاسبي والعملياتي غير القابل للتعديل لكافة حركات المخزون والإنتاج"
+        reportSubtitleEn="Certified Official Statement of Audit Trail and Operating Ledger for All Inventory & Manufacturing Movements"
+        documentNumber={`AUD-LOG-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`}
+        categoryLabelAr={selectedAction === 'ALL' ? 'كافة فئات الإجراءات' : selectedAction}
+        categoryLabelEn={selectedAction === 'ALL' ? 'All Action Types' : selectedAction}
+        filterScopeAr={`الفئة: ${selectedAction} | عدد العمليات: ${filteredLogs.length}`}
+        filterScopeEn={`Action Type: ${selectedAction} | Records: ${filteredLogs.length}`}
+        summaryCards={[
+          { labelAr: 'إجمالي السجلات المدققة', labelEn: 'Total Audited Records', value: filteredLogs.length, isNumber: true, variant: 'default' },
+          { labelAr: 'حركات الإضافة والتسليم', labelEn: 'Receipts & Issues', value: filteredLogs.filter(l => l.action.includes('RECEIPT') || l.action.includes('ISSUE')).length, isNumber: true, variant: 'info' },
+          { labelAr: 'أوامر الإنتاج والتشغيل', labelEn: 'Production Actions', value: filteredLogs.filter(l => l.action.includes('PROD')).length, isNumber: true, variant: 'success' },
+          { labelAr: 'اعتمادات الجودة والتكاليف', labelEn: 'Quality & Landed Costs', value: filteredLogs.filter(l => l.action.includes('QUALITY') || l.action.includes('COST')).length, isNumber: true, variant: 'default' }
+        ]}
+        notes={
+          isAr
+            ? 'سجل تدقيق رقمي محمي ومطابق لمعايير الرقابة الداخلية وإجراءات ISO 9001، غير قابل للتعديل بعد الترحيل والاعتماد.'
+            : 'Protected digital audit trail complying with internal control standards and ISO 9001 procedures.'
+        }
+        columns={[
+          { key: 'date', headerAr: 'التاريخ والوقت', headerEn: 'Timestamp', isMono: true, width: '130px' },
+          { key: 'user', headerAr: 'المستخدم المسؤول', headerEn: 'Authorized User', width: '140px' },
+          { key: 'action', headerAr: 'نوع العملية', headerEn: 'Action Type', width: '120px' },
+          { key: 'doc', headerAr: 'رقم المستند', headerEn: 'Document Ref', isMono: true, width: '120px' },
+          { key: 'details', headerAr: 'تفاصيل العملية وبيانات التغيير', headerEn: 'Audit Details & Value Changes' }
+        ]}
+        rows={filteredLogs.map(l => [
+          `${l.date} ${l.time}`,
+          l.userName,
+          l.action,
+          l.documentNumber || '-',
+          l.details
+        ])}
+      />
     </div>
   );
 };
