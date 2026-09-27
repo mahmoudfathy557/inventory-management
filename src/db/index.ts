@@ -83,7 +83,7 @@ export async function initDatabase() {
     );
     if (checkAdmin.rowCount === 0) {
       const bcrypt = await import('bcryptjs');
-      const hash = bcrypt.default.hashSync('Password123!', 10);
+      const hash = bcrypt.default.hashSync('Admin@2026#Arab', 10);
       await p.query(
         `INSERT INTO users (id, username, full_name, email, password_hash, role, department, active, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
