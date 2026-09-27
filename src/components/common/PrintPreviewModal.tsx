@@ -28,6 +28,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { CompanyLogo } from './CompanyLogo';
+import { companyBranding } from '../../config/branding';
 
 export interface PrintPreviewColumn {
   key: string;
@@ -460,22 +461,22 @@ ${summaryCards ? summaryCards.map(s => `${isAr ? s.labelAr : s.labelEn}: ${s.val
               <div className="border-b-2 border-slate-900 pb-4 mb-5 text-slate-900">
                 <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-300">
                   <div className="flex items-start gap-3.5">
-                    <CompanyLogo className="w-12 h-12 text-slate-900 shrink-0" light={true} />
+                    <CompanyLogo size="md" className="shrink-0" alt={companyBranding.logoAlt} />
                     <div>
                       <h1 className="text-base font-extrabold text-slate-950 tracking-tight">
                         {isAr
-                          ? 'الشركة العربية للدائن'
-                          : 'Arab Co. For Plastic'}
+                          ? companyBranding.arabicName
+                          : companyBranding.companyName}
                       </h1>
                       <p className="text-xs text-slate-600 font-semibold mt-0.5">
                         {isAr
-                          ? 'قطاع الإدارة المالية وحسابات التكاليف — الإدارة العامة للرقابة والتدقيق المخزني'
-                          : 'Finance & Cost Accounting Directorate — General Audit & Inventory Control'}
+                          ? companyBranding.sectorAr
+                          : companyBranding.sectorEn}
                       </p>
                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                         {isAr
-                          ? 'المنطقة الصناعية الثالثة، السادس من أكتوبر | س.ت: 89412 | ب.ض: 239-482-109'
-                          : '3rd Industrial Zone, 6th of October City, Egypt | CR: 89412 | Tax ID: 239-482-109'}
+                          ? companyBranding.addressAr
+                          : companyBranding.addressEn}
                       </p>
                     </div>
                   </div>

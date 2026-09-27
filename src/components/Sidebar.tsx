@@ -226,7 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
         {/* Brand Header & Close Button */}
         <div className="p-4 border-b border-slate-800/80 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <CompanyLogo className="w-8 h-8 text-white" showText={true} light={true} />
+            <CompanyLogo size="sm" showText={true} light={true} />
           </div>
 
           {/* Close Sidebar Button (Mobile/Tablet and interactive toggle) */}

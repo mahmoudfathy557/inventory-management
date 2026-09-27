@@ -1,79 +1,112 @@
 import React from 'react';
+import { companyBranding } from '../../config/branding';
 
 export interface CompanyLogoProps {
   className?: string;
+  style?: React.CSSProperties;
   showText?: boolean;
   variant?: 'full' | 'emblem' | 'horizontal';
   light?: boolean;
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'custom';
+  maxWidth?: number | string;
+  maxHeight?: number | string;
+  alt?: string;
 }
 
 /**
- * Official Logo Component for Arab Co. For Plastic (الشركة العربية للدائن)
- * Faithfully matches the exact corporate emblem:
- * - Solid Navy Blue (#112a5d) AP Monogram
- * - Sinuous 3D Intertwined White (#ffffff) Double-Helix Polymer Strand
- * - Clean English Typography: "Arab Co. For Plastic"
- * - Authentic Arabic Calligraphy: "الشركة العربية للدائن"
+ * Centralized Official Company Logo Component
+ * Single Source of Truth for Arab Co. For Plastic (الشركة العربية للدائن)
+ *
+ * Strict Display Rules:
+ * - Real <img> element using the official asset: /assets/company-logo.jpg
+ * - object-fit: contain; object-position: center;
+ * - Preserves exact original proportions and aspect ratio (1:1)
+ * - Renders original white background and colors exactly as uploaded
+ * - No cropping, distortion, filters, or AI regeneration
  */
 export const CompanyLogo: React.FC<CompanyLogoProps> = ({
-  className = 'w-10 h-10',
+  className = '',
+  style = {},
   showText = false,
   variant = 'horizontal',
-  light = false
+  light = false,
+  size = 'custom',
+  maxWidth,
+  maxHeight,
+  alt = companyBranding.logoAlt
 }) => {
-  // 1. Full Square Brand Logo (Monogram + English + Arabic as in original image)
-  if (variant === 'full') {
+  // Preset responsive maximum bounding sizes (while strictly preserving 1:1 aspect ratio)
+  const sizeClasses: Record<string, string> = {
+    xs: 'h-8 w-auto max-h-8 max-w-full',
+    sm: 'h-10 w-auto max-h-10 max-w-full',
+    md: 'h-14 w-auto max-h-14 max-w-full',
+    lg: 'h-20 w-auto max-h-20 max-w-full',
+    xl: 'h-28 w-auto max-h-28 max-w-full',
+    custom: ''
+  };
+
+  const imageStyle: React.CSSProperties = {
+    objectFit: 'contain',
+    objectPosition: 'center',
+    aspectRatio: '1 / 1',
+    maxWidth: maxWidth || undefined,
+    maxHeight: maxHeight || undefined,
+    ...style
+  };
+
+  const imgElement = (
+    <img
+      src={companyBranding.logo}
+      alt={alt}
+      loading="eager"
+      decoding="sync"
+      className={`shrink-0 block ${size !== 'custom' ? sizeClasses[size] : ''} ${className}`}
+      style={imageStyle}
+      referrerPolicy="no-referrer"
+    />
+  );
+
+  // If used in variant="full" or just the raw logo
+  if (variant === 'full' || (!showText && variant !== 'horizontal')) {
     return (
       <div className={`inline-flex flex-col items-center justify-center ${light ? 'bg-white p-2 rounded-2xl shadow-sm border border-slate-200' : ''}`}>
-        <img
-          src="/company-logo.svg"
-          alt="الشركة العربية للدائن - Arab Co. For Plastic"
-          className={`${className} object-contain`}
-        />
+        {imgElement}
       </div>
     );
   }
 
-  // 2. Emblem Only (AP Monogram with Double-Helix)
-  if (variant === 'emblem' || !showText) {
+  // Pure emblem / logo without companion text
+  if (!showText) {
     return (
       <div className={`inline-flex items-center justify-center shrink-0 ${light ? 'bg-white p-1 rounded-xl shadow-xs border border-white/30' : ''}`}>
-        <img
-          src="/company-logo-emblem.svg"
-          alt="الشركة العربية للدائن"
-          className={`${className} object-contain`}
-        />
+        {imgElement}
       </div>
     );
   }
 
-  // 3. Horizontal Format (Emblem + Authentic Bilingual Brand Typography)
+  // Horizontal presentation: Official Image Logo + Authentic Brand Typography
   return (
     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-      <div className={`shrink-0 inline-flex items-center justify-center ${light ? 'bg-white p-1.5 rounded-xl shadow-xs border border-white/20' : ''}`}>
-        <img
-          src="/company-logo-emblem.svg"
-          alt="الشركة العربية للدائن"
-          className={`${className} object-contain`}
-        />
+      <div className={`shrink-0 inline-flex items-center justify-center ${light ? 'bg-white p-1 rounded-xl shadow-xs border border-white/20' : ''}`}>
+        {imgElement}
       </div>
 
       <div className="flex flex-col text-right rtl:text-right ltr:text-left min-w-0">
         <span
           className={`font-extrabold text-sm sm:text-base leading-tight truncate tracking-tight ${
-            light ? 'text-white' : 'text-[#112a5d]'
+            light ? 'text-white' : 'text-[#10285a]'
           }`}
           style={{ fontFamily: "'Aref Ruqaa', 'Cairo', serif" }}
         >
-          الشركة العربية للدائن
+          {companyBranding.arabicName}
         </span>
         <span
           className={`text-[10px] sm:text-[11px] font-semibold tracking-wide leading-none truncate mt-0.5 ${
-            light ? 'text-slate-300' : 'text-[#112a5d]/80'
+            light ? 'text-slate-300' : 'text-[#10285a]/80'
           }`}
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          Arab Co. For Plastic
+          {companyBranding.companyName}
         </span>
       </div>
     </div>

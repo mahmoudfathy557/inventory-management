@@ -3,6 +3,7 @@ import { Building2, ShieldCheck, Calendar, User, FileText, CheckCircle2 } from '
 import { useApp } from '../../context/AppContext';
 import { formatNumber } from '../../utils/formatters';
 import { CompanyLogo } from '../common/CompanyLogo';
+import { companyBranding } from '../../config/branding';
 
 interface AuditPrintHeaderProps {
   reportTitleAr: string;
@@ -42,22 +43,22 @@ export const AuditPrintHeader: React.FC<AuditPrintHeaderProps> = ({
       {/* Top Enterprise Banner */}
       <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-300">
         <div className="flex items-start gap-3.5">
-          <CompanyLogo className="w-12 h-12 text-slate-900 shrink-0" light={true} />
+          <CompanyLogo size="md" className="shrink-0" alt={companyBranding.logoAlt} />
           <div className="space-y-1">
             <div className="text-base font-extrabold tracking-tight uppercase text-slate-900">
               {isAr
-                ? 'الشركة العربية للدائن'
-                : 'Arab Co. For Plastic'}
+                ? companyBranding.arabicName
+                : companyBranding.companyName}
             </div>
             <div className="text-xs text-slate-600 font-medium">
               {isAr
-                ? 'قطاع الشؤون المالية وحسابات التكاليف — الإدارة العامة للرقابة والتدقيق المخزني'
-                : 'Financial Affairs & Cost Accounting Sector — General Audit & Inventory Control'}
+                ? companyBranding.sectorAr
+                : companyBranding.sectorEn}
             </div>
             <div className="text-[10px] text-slate-500">
               {isAr
-                ? 'المنطقة الصناعية الثالثة، السادس من أكتوبر | س.ت: 89412 | ب.ض: 239-482-109'
-                : '3rd Industrial Zone, 6th of October City, Egypt | CR: 89412 | Tax ID: 239-482-109'}
+                ? companyBranding.addressAr
+                : companyBranding.addressEn}
             </div>
           </div>
         </div>

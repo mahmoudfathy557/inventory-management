@@ -22,6 +22,21 @@
     <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body class="bg-slate-50 text-slate-900 font-['Cairo',sans-serif] antialiased selection:bg-blue-600 selection:text-white">
+    <script>
+      // Gracefully silence benign Vite HMR websocket connection errors in AI Studio iframe environment
+      (function() {
+        if (typeof window !== 'undefined' && window.console && window.console.error) {
+          const origError = window.console.error;
+          window.console.error = function(message, ...args) {
+            const msgStr = typeof message === 'string' ? message : (message && (message.message || message.toString())) || '';
+            if (typeof msgStr === 'string' && msgStr.includes('[vite]') && (msgStr.includes('websocket') || msgStr.includes('WebSocket') || msgStr.includes('failed to connect') || msgStr.includes('server connection lost'))) {
+              return;
+            }
+            return origError.apply(this, [message, ...args]);
+          };
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -105,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Brand Watermark */}
             <div className="hidden lg:flex items-center gap-1.5 ltr:pr-1 rtl:pl-1">
-              <CompanyLogo className="w-6 h-6" showText={true} light={false} />
+              <CompanyLogo size="xs" showText={true} />
               <span className="text-slate-300 ltr:ml-2 rtl:mr-2">|</span>
             </div>
 

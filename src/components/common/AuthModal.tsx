@@ -5,6 +5,7 @@ import { UserRole } from '../../types';
 import { RBAC_ROLE_DEFINITIONS } from '../../utils/rbac';
 import { authService } from '../../services/authService';
 import { useApp } from '../../context/AppContext';
+import { CompanyLogo } from './CompanyLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -78,9 +79,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, mode: ini
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 text-white text-center relative">
-          <div className="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center mx-auto mb-3 shadow-inner">
-            <Shield className="w-6 h-6 text-blue-300" />
-          </div>
+          <CompanyLogo size="sm" light={true} className="mx-auto mb-3" />
           <h3 className="text-lg font-bold">
             {mode === 'login'
               ? (isAr ? 'تسجيل الدخول للنظام (JWT / RBAC)' : 'Enterprise Sign In (JWT / RBAC)')
