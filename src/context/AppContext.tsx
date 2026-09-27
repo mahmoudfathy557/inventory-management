@@ -483,13 +483,10 @@ export function computeItemWarehouseStockMap(
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => loadStorage<Language>('lang', 'ar'));
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
-    // Check auth token or stored user
+    // Check auth token and stored user - only restore session if valid JWT token exists
     const token = authService.getToken();
     const storedUser = authService.getStoredUser();
-    if (token && storedUser) return storedUser;
-    // Check saved user in storage
-    const saved = loadStorage<User | null>('user', null);
-    if (saved && saved.id) return saved;
+    if (token && storedUser && storedUser.id) return storedUser;
     return null;
   });
   const [users, setUsers] = useState<User[]>(() => loadStorage<User[]>('users', INITIAL_USERS));

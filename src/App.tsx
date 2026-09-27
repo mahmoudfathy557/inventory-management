@@ -49,9 +49,9 @@ function getInitialTab(isAuthenticated: boolean): NavItem {
   let hasUser = isAuthenticated;
   if (typeof window !== 'undefined' && !hasUser) {
     try {
-      const storedUser = localStorage.getItem('mfg_inv_odoo_v2_user');
-      const token = localStorage.getItem('auth_token');
-      if (storedUser || token) hasUser = true;
+      const token = localStorage.getItem('mfg_erp_jwt_token');
+      const storedUser = localStorage.getItem('mfg_erp_auth_user');
+      if (token && storedUser) hasUser = true;
     } catch {}
   }
 

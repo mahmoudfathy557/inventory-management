@@ -35,6 +35,8 @@ export const authService = {
     try {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
+      localStorage.removeItem('mfg_inv_odoo_v2_user');
+      localStorage.removeItem('auth_token');
     } catch (e) {
       console.warn('Failed to clear auth storage:', e);
     }

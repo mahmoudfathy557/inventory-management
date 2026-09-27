@@ -76,6 +76,31 @@ export async function initDatabase() {
   try {
     await p.query('SELECT 1');
     console.log(' Connected to PostgreSQL Cloud SQL database successfully via Drizzle.');
+
+    // Ensure persistent administrator user exists in Cloud SQL users table
+    const checkAdmin = await p.query(
+      "SELECT id FROM users WHERE username = 'admin' OR email = 'admin@arabplastic.local'"
+    );
+    if (checkAdmin.rowCount === 0) {
+      const bcrypt = await import('bcryptjs');
+      const hash = bcrypt.default.hashSync('Password123!', 10);
+      await p.query(
+        `INSERT INTO users (id, username, full_name, email, password_hash, role, department, active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+         ON CONFLICT (email) DO NOTHING`,
+        [
+          'user-admin',
+          'admin',
+          'أ. محمود فتحي (مدير النظام العام)',
+          'admin@arabplastic.local',
+          hash,
+          'ADMIN',
+          'IT / Operations',
+          true
+        ]
+      );
+      console.log(' Verified and created persistent ADMIN account in Cloud SQL users table.');
+    }
   } catch (err: any) {
     console.warn('⚠️ Could not connect to PostgreSQL Cloud SQL:', err?.message || err);
   }
