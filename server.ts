@@ -42,36 +42,20 @@ async function startServer() {
 
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 2000,
+    limit: 1000,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: req => req.originalUrl.startsWith('/api/health'),
-    handler: (req, res) => {
-      res.setHeader('Content-Type', 'application/json');
-      res.status(429).json({ error: 'Too many requests. Please try again later.' });
-    },
+    message: { error: 'Too many requests. Please try again later.' },
   });
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 200,
+    limit: 20,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skipSuccessfulRequests: true,
-    handler: (req, res) => {
-      res.setHeader('Content-Type', 'application/json');
-      res.status(429).json({ error: 'Too many authentication attempts. Please try again later.' });
-    },
-  });
-
-  // Fast health endpoint before any rate limiters or routers
-  app.get('/api/health', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.status(200).json({
-      ok: true,
-      server: 'available',
-      timestamp: new Date().toISOString()
-    });
+    message: { error: 'Too many authentication attempts. Please try again later.' },
   });
 
   app.use('/api/auth', authLimiter);
@@ -79,6 +63,11 @@ async function startServer() {
 
   // Mount API router FIRST before Vite/static middlewares
   app.use('/api', apiRouter);
+
+  // Liveness check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
   // Readiness check (verifies database connectivity)
   app.get('/api/health/ready', async (req, res) => {
@@ -94,28 +83,18 @@ async function startServer() {
   app.use(express.static(path.join(process.cwd(), 'public')));
 
   // Vite middleware in dev or static files in production
-  const isBundle = typeof __filename !== 'undefined' && (__filename.endsWith('.cjs') || __filename.includes('dist'));
-  const isProduction = process.env.NODE_ENV === 'production' || isBundle;
-
-  let viteMounted = false;
-  if (!isProduction) {
-    try {
-      const { createServer: createViteServer } = await import('vite');
-      const vite = await createViteServer({
-        server: {
-          middlewareMode: true,
-          hmr: false,
-        },
-        appType: 'spa',
-      });
-      app.use(vite.middlewares);
-      viteMounted = true;
-    } catch (viteErr) {
-      console.warn('Vite dev middleware initialization warning, falling back to static dist:', viteErr);
-    }
-  }
-
-  if (isProduction || !viteMounted) {
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        ws: false,
+      },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(
       '/assets',
