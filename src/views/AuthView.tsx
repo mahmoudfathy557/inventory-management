@@ -33,7 +33,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onSuc
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [emailOrUsername, setEmailOrUsername] = useState('admin');
-  const [password, setPassword] = useState('Password123!');
+  const [password, setPassword] = useState('Admin@2026#Arab');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -57,7 +57,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onSuc
 
   const handleQuickFill = (targetRole: UserRole, targetUser: string, dept: string) => {
     setEmailOrUsername(targetUser);
-    setPassword('Password123!');
+    setPassword(targetRole === UserRole.ADMIN ? 'Admin@2026#Arab' : 'Password123!');
     setRole(targetRole);
     setDepartment(dept);
     setError(null);
@@ -102,7 +102,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onSuc
         }
       }
     } catch (err: any) {
-      setError(err?.message || (isAr ? 'حدث خطأ في عملية المصادقة' : 'Authentication failed'));
+      const msg = String(err?.message || '');
+      if (msg.includes('no available server') || msg.includes('502') || msg.includes('503')) {
+        setError(isAr ? 'الخادم في وضع الاستعداد السحابي، جاري الاتصال... يرجى إعادة الضغط على تسجيل الدخول الآن.' : 'Server waking up, please click Sign In again.');
+      } else {
+        setError(err?.message || (isAr ? 'حدث خطأ في عملية المصادقة' : 'Authentication failed'));
+      }
     } finally {
       setLoading(false);
     }

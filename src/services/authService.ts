@@ -64,15 +64,31 @@ export const authService = {
   },
 
   async login(emailOrUsername: string, password: string): Promise<{ user: User; token: string; permissions: PermissionSet }> {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emailOrUsername, password }),
-    });
+    let lastError: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emailOrUsername, password }),
+        });
 
-    const data = await parseApiResponse<{ user: User; token: string; permissions: PermissionSet }>(res);
-    this.setAuth(data.token, data.user);
-    return data;
+        const data = await parseApiResponse<{ user: User; token: string; permissions: PermissionSet }>(res);
+        this.setAuth(data.token, data.user);
+        return data;
+      } catch (err: any) {
+        lastError = err;
+        const msg = String(err?.message || '');
+        if (msg.includes('no available server') || msg.includes('502') || msg.includes('503') || msg.includes('Failed to fetch')) {
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+            continue;
+          }
+        }
+        throw err;
+      }
+    }
+    throw lastError;
   },
 
   async register(payload: { username: string; email: string; fullName: string; password: string; role: UserRole; department?: string }): Promise<{ user: User; token: string; permissions: PermissionSet }> {

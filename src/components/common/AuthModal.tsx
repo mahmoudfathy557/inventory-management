@@ -19,7 +19,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, mode: ini
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [emailOrUsername, setEmailOrUsername] = useState('admin');
-  const [password, setPassword] = useState('Password123!');
+  const [password, setPassword] = useState('Admin@2026#Arab');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -63,7 +63,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, mode: ini
         }, 800);
       }
     } catch (err: any) {
-      setError(err?.message || (isAr ? 'فشلت عملية المصادقة. يرجى التحقق من البيانات.' : 'Authentication error.'));
+      const msg = String(err?.message || '');
+      if (msg.includes('no available server') || msg.includes('502') || msg.includes('503')) {
+        setError(isAr ? 'الخادم في وضع الاستعداد السحابي، جاري الاتصال... يرجى إعادة الضغط على تسجيل الدخول الآن.' : 'Server waking up, please click Sign In again.');
+      } else {
+        setError(err?.message || (isAr ? 'فشلت عملية المصادقة. يرجى التحقق من البيانات.' : 'Authentication error.'));
+      }
     } finally {
       setLoading(false);
     }
@@ -71,7 +76,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, mode: ini
 
   const handleQuickFill = (userRole: UserRole, userEmail: string, name: string) => {
     setEmailOrUsername(userEmail);
-    setPassword('Password123!');
+    setPassword(userRole === UserRole.ADMIN ? 'Admin@2026#Arab' : 'Password123!');
   };
 
   return createPortal(
