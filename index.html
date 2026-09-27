@@ -2,6 +2,87 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // 1. Mock Vite HMR WebSocket so @vite/client in AI Studio iframe connects cleanly without error
+      (function() {
+        if (typeof window === 'undefined') return;
+        const OriginalWebSocket = window.WebSocket;
+        if (OriginalWebSocket) {
+          function DummyViteWebSocket(url, protocols) {
+            const urlStr = String(url || '');
+            const protoStr = Array.isArray(protocols) ? protocols.join(',') : String(protocols || '');
+            if (urlStr.includes('vite') || protoStr.includes('vite') || urlStr.includes('24678') || urlStr.includes('token=')) {
+              const target = new EventTarget();
+              target.url = urlStr;
+              target.protocols = protocols;
+              target.readyState = 0; // CONNECTING
+              target.OPEN = 1;
+              target.CLOSING = 2;
+              target.CLOSED = 3;
+              target.send = function() {};
+              target.close = function() {
+                target.readyState = 3;
+                target.dispatchEvent(new Event('close'));
+              };
+              setTimeout(() => {
+                target.readyState = 1; // OPEN
+                target.dispatchEvent(new Event('open'));
+              }, 5);
+              return target;
+            }
+            return new OriginalWebSocket(url, protocols);
+          }
+          DummyViteWebSocket.prototype = OriginalWebSocket.prototype;
+          DummyViteWebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+          DummyViteWebSocket.OPEN = OriginalWebSocket.OPEN;
+          DummyViteWebSocket.CLOSING = OriginalWebSocket.CLOSING;
+          DummyViteWebSocket.CLOSED = OriginalWebSocket.CLOSED;
+          window.WebSocket = DummyViteWebSocket;
+        }
+
+        function isViteArtifact(args) {
+          for (let i = 0; i < args.length; i++) {
+            const item = args[i];
+            if (!item) continue;
+            let str = '';
+            if (typeof item === 'string') {
+              str = item;
+            } else if (item instanceof Error) {
+              str = (item.message || '') + ' ' + (item.stack || '');
+            } else {
+              try { str = JSON.stringify(item); } catch(e) { str = String(item); }
+            }
+            const lower = str.toLowerCase();
+            if (
+              str.includes('[vite]') ||
+              str.includes('/@vite/') ||
+              str.includes('vite-hmr') ||
+              lower.includes('websocket') ||
+              (lower.includes('vite') && (lower.includes('connect') || lower.includes('failed')))
+            ) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event && event.reason && isViteArtifact([event.reason])) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('error', function(event) {
+          if (event && isViteArtifact([event.message, event.error])) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -18,23 +99,53 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body class="bg-slate-50 text-slate-900 font-['Cairo',sans-serif] antialiased selection:bg-blue-600 selection:text-white">
     <script>
-      // Gracefully silence benign Vite HMR websocket connection errors in AI Studio iframe environment
+      // 2. Wrap console in body after _aistudio-iframe.js executes to completely filter [vite] noise
       (function() {
-        if (typeof window !== 'undefined' && window.console && window.console.error) {
-          const origError = window.console.error;
-          window.console.error = function(message, ...args) {
-            const msgStr = typeof message === 'string' ? message : (message && (message.message || message.toString())) || '';
-            if (typeof msgStr === 'string' && msgStr.includes('[vite]') && (msgStr.includes('websocket') || msgStr.includes('WebSocket') || msgStr.includes('failed to connect') || msgStr.includes('server connection lost'))) {
-              return;
+        if (typeof window === 'undefined' || !window.console) return;
+
+        function isViteMsg(args) {
+          for (let i = 0; i < args.length; i++) {
+            const item = args[i];
+            if (!item) continue;
+            let str = '';
+            if (typeof item === 'string') {
+              str = item;
+            } else if (item instanceof Error) {
+              str = (item.message || '') + ' ' + (item.stack || '');
+            } else {
+              try { str = JSON.stringify(item); } catch(e) { str = String(item); }
             }
-            return origError.apply(this, [message, ...args]);
-          };
+            const lower = str.toLowerCase();
+            if (
+              str.includes('[vite]') ||
+              str.includes('/@vite/') ||
+              str.includes('vite-hmr') ||
+              lower.includes('websocket') ||
+              (lower.includes('vite') && (lower.includes('connect') || lower.includes('failed')))
+            ) {
+              return true;
+            }
+          }
+          return false;
         }
+
+        const methods = ['error', 'warn', 'debug', 'log', 'info'];
+        methods.forEach(function(m) {
+          if (typeof window.console[m] === 'function') {
+            const orig = window.console[m];
+            window.console[m] = function(...args) {
+              if (isViteMsg(args)) {
+                return;
+              }
+              return orig.apply(this, args);
+            };
+          }
+        });
       })();
     </script>
     <div id="root"></div>
