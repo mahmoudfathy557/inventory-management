@@ -97,6 +97,50 @@ export interface InventoryPostingResult {
   message: string;
 }
 
+export interface ReversalPostingPayload {
+  documentType: string;
+  documentNumber: string;
+  itemId: string;
+  locationId: string;
+  destLocationId?: string;
+  quantity: number;
+  unitCost?: number;
+  totalValue?: number;
+  landedCostAmount?: number;
+  varianceQuantity?: number;
+  reason: string;
+  userId?: string;
+  userName?: string;
+}
+
+export interface ReversalPostingResult {
+  success: boolean;
+  reversalDocumentNumber: string;
+  originalDocumentNumber: string;
+  documentType: string;
+  itemId: string;
+  locationId: string;
+  qtyDelta: number;
+  valueDelta: number;
+  preValuation: {
+    onHandQty: number;
+    inventoryValue: number;
+    movingAverageCost: number;
+  };
+  postValuation: {
+    onHandQty: number;
+    inventoryValue: number;
+    movingAverageCost: number;
+  };
+  linkedTransferResult?: {
+    destLocationId: string;
+    destPreValuation: { onHandQty: number; inventoryValue: number; movingAverageCost: number };
+    destPostValuation: { onHandQty: number; inventoryValue: number; movingAverageCost: number };
+  };
+  timestamp: string;
+  message: string;
+}
+
 // In-Memory Storage for Independent Location Balances
 // Key: `${itemId}:::${locationId}`
 const locationBalances = new Map<string, LocationValuationBalance>();
@@ -685,6 +729,237 @@ export class ValuationEngine {
         linkedTransferResult,
         timestamp,
         message: `${rule.nameEn} posted successfully.`
+      };
+    } finally {
+      releaseLock();
+      if (releaseDestLock) {
+        releaseDestLock();
+      }
+    }
+  }
+
+  /**
+   * Authoritative transaction reversal engine conforming to SAP Business One rules
+   * 1. Incoming transactions: reversing reduces stock and value, checks that onHand >= qty (no negative inventory).
+   * 2. Outgoing transactions: reversing restores stock and value using original posted transaction data (NOT today's MAC).
+   * 3. Transfers: atomically reverses destination side (-qty) and source side (+qty).
+   * 4. Landed costs: reverses valuation amount without moving physical stock.
+   * 5. Production: reverses finished goods receipt or material issue, keeps scrap at 0.
+   */
+  public static async reverseTransaction(
+    payload: ReversalPostingPayload
+  ): Promise<ReversalPostingResult> {
+    const lockKey = getLockKey(payload.itemId, payload.locationId);
+    const releaseLock = await acquireLock(lockKey);
+
+    let releaseDestLock: (() => void) | null = null;
+    if (payload.destLocationId) {
+      const destLockKey = getLockKey(payload.itemId, payload.destLocationId);
+      releaseDestLock = await acquireLock(destLockKey);
+    }
+
+    try {
+      const current = this.getBalance(payload.itemId, payload.locationId);
+      const preValuation = { ...current };
+
+      const timestamp = new Date().toISOString();
+      const reversalDocNumber = `REV-${payload.documentNumber}`;
+
+      let qtyDelta = 0;
+      let valueDelta = 0;
+      let postOnHand = current.onHandQty;
+      let postValue = current.inventoryValue;
+      let postMAC = current.movingAverageCost;
+
+      let linkedTransferResult: ReversalPostingResult['linkedTransferResult'] | undefined;
+
+      const typeKey = payload.documentType.toUpperCase();
+
+      // 1. Incoming Types (Receipts, Production Receipts, Returns from Customer, Count Surplus):
+      if (
+        typeKey.includes('RECEIPT') ||
+        typeKey.includes('GOODS_RECEIPT_PO') ||
+        typeKey.includes('PRODUCTION_RECEIPT') ||
+        typeKey.includes('RETURN_FROM_CUSTOMER')
+      ) {
+        if (payload.quantity <= 0) {
+          throw new Error('Quantity to reverse must be greater than zero.');
+        }
+        if (current.onHandQty < payload.quantity) {
+          throw new Error(
+            `Cannot cancel transaction: current on-hand stock (${current.onHandQty}) at location '${payload.locationId}' is less than transaction quantity (${payload.quantity}). Stock was consumed by subsequent operations.`
+          );
+        }
+
+        const transVal = payload.totalValue !== undefined && payload.totalValue > 0
+          ? payload.totalValue
+          : round2(payload.quantity * (payload.unitCost || current.movingAverageCost));
+
+        qtyDelta = -payload.quantity;
+        valueDelta = -transVal;
+
+        postOnHand = round4(current.onHandQty - payload.quantity);
+        postValue = Math.max(0, round2(current.inventoryValue - transVal));
+        postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : current.movingAverageCost;
+      }
+      // 2. Outgoing Types (Issues, Material Issues for Production, Customer Deliveries, Returns to Vendor):
+      else if (
+        typeKey.includes('ISSUE') ||
+        typeKey.includes('CUSTOMER_DELIVERY') ||
+        typeKey.includes('RETURN_TO_VENDOR')
+      ) {
+        if (payload.quantity <= 0) {
+          throw new Error('Quantity to reverse must be greater than zero.');
+        }
+
+        const transVal = payload.totalValue !== undefined && payload.totalValue > 0
+          ? payload.totalValue
+          : round2(payload.quantity * (payload.unitCost || current.movingAverageCost));
+
+        qtyDelta = payload.quantity;
+        valueDelta = transVal;
+
+        postOnHand = round4(current.onHandQty + payload.quantity);
+        postValue = round2(current.inventoryValue + transVal);
+        postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : (payload.unitCost || current.movingAverageCost);
+      }
+      // 3. Transfers: Double-leg atomic reversal
+      else if (typeKey.includes('TRANSFER')) {
+        if (!payload.destLocationId) {
+          throw new Error('Source location is required to reverse an inventory transfer.');
+        }
+
+        const destCurrent = current;
+        if (destCurrent.onHandQty < payload.quantity) {
+          throw new Error(
+            `Cannot reverse transfer: destination location '${payload.locationId}' only has ${destCurrent.onHandQty} on hand, but transfer quantity was ${payload.quantity}. Destination stock has been consumed.`
+          );
+        }
+
+        const transVal = payload.totalValue !== undefined && payload.totalValue > 0
+          ? payload.totalValue
+          : round2(payload.quantity * (payload.unitCost || destCurrent.movingAverageCost));
+
+        // Deduct from destination
+        qtyDelta = -payload.quantity;
+        valueDelta = -transVal;
+        postOnHand = round4(destCurrent.onHandQty - payload.quantity);
+        postValue = Math.max(0, round2(destCurrent.inventoryValue - transVal));
+        postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : destCurrent.movingAverageCost;
+
+        // Restore to source location
+        const srcCurrent = this.getBalance(payload.itemId, payload.destLocationId);
+        const srcPostOnHand = round4(srcCurrent.onHandQty + payload.quantity);
+        const srcPostValue = round2(srcCurrent.inventoryValue + transVal);
+        const srcPostMAC = srcPostOnHand > 0 ? round4(srcPostValue / srcPostOnHand) : srcCurrent.movingAverageCost;
+
+        this.setBalance({
+          itemId: payload.itemId,
+          locationId: payload.destLocationId,
+          warehouseId: payload.destLocationId,
+          onHandQty: srcPostOnHand,
+          inventoryValue: srcPostValue,
+          movingAverageCost: srcPostMAC,
+          lastDocumentNumber: reversalDocNumber,
+          lastUpdated: timestamp
+        });
+
+        linkedTransferResult = {
+          destLocationId: payload.destLocationId,
+          destPreValuation: {
+            onHandQty: srcCurrent.onHandQty,
+            inventoryValue: srcCurrent.inventoryValue,
+            movingAverageCost: srcCurrent.movingAverageCost
+          },
+          destPostValuation: {
+            onHandQty: srcPostOnHand,
+            inventoryValue: srcPostValue,
+            movingAverageCost: srcPostMAC
+          }
+        };
+      }
+      // 4. Landed Cost
+      else if (typeKey.includes('LANDED_COST')) {
+        const lcAmount = payload.landedCostAmount || payload.totalValue || 0;
+        if (lcAmount <= 0) {
+          throw new Error('Landed cost reversal amount must be greater than zero.');
+        }
+
+        qtyDelta = 0;
+        valueDelta = -lcAmount;
+        postOnHand = current.onHandQty;
+        postValue = Math.max(0, round2(current.inventoryValue - lcAmount));
+        postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : current.movingAverageCost;
+      }
+      // 5. Count Posting
+      else if (typeKey.includes('COUNT')) {
+        const variance = payload.varianceQuantity || 0;
+        const adjVal = payload.totalValue || 0;
+
+        if (variance > 0) {
+          if (current.onHandQty < variance) {
+            throw new Error(`Cannot reverse physical count surplus: current on-hand (${current.onHandQty}) is less than surplus (${variance}).`);
+          }
+          qtyDelta = -variance;
+          valueDelta = -adjVal;
+          postOnHand = round4(current.onHandQty - variance);
+          postValue = Math.max(0, round2(current.inventoryValue - adjVal));
+          postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : current.movingAverageCost;
+        } else {
+          const absVar = Math.abs(variance);
+          qtyDelta = absVar;
+          valueDelta = adjVal;
+          postOnHand = round4(current.onHandQty + absVar);
+          postValue = round2(current.inventoryValue + adjVal);
+          postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : current.movingAverageCost;
+        }
+      }
+      // 6. Revaluation
+      else if (typeKey.includes('REVALUATION')) {
+        const adjVal = payload.totalValue || 0;
+        qtyDelta = 0;
+        valueDelta = -adjVal;
+        postOnHand = current.onHandQty;
+        postValue = Math.max(0, round2(current.inventoryValue - adjVal));
+        postMAC = postOnHand > 0 ? round4(postValue / postOnHand) : 0;
+      } else {
+        throw new Error(`Unsupported document type for reversal: ${payload.documentType}`);
+      }
+
+      // Update primary location balance
+      this.setBalance({
+        itemId: payload.itemId,
+        locationId: payload.locationId,
+        warehouseId: payload.locationId,
+        onHandQty: postOnHand,
+        inventoryValue: postValue,
+        movingAverageCost: postMAC,
+        lastDocumentNumber: reversalDocNumber,
+        lastUpdated: timestamp
+      });
+
+      return {
+        success: true,
+        reversalDocumentNumber: reversalDocNumber,
+        originalDocumentNumber: payload.documentNumber,
+        documentType: payload.documentType,
+        itemId: payload.itemId,
+        locationId: payload.locationId,
+        qtyDelta,
+        valueDelta,
+        preValuation: {
+          onHandQty: preValuation.onHandQty,
+          inventoryValue: preValuation.inventoryValue,
+          movingAverageCost: preValuation.movingAverageCost
+        },
+        postValuation: {
+          onHandQty: postOnHand,
+          inventoryValue: postValue,
+          movingAverageCost: postMAC
+        },
+        linkedTransferResult,
+        timestamp,
+        message: `Transaction ${payload.documentNumber} cancelled and reversed successfully.`
       };
     } finally {
       releaseLock();

@@ -17,6 +17,7 @@ import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { LocationValuationCard } from '../components/common/LocationValuationCard';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryReceipt, ItemType } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -676,48 +677,15 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
         </div>
       )}
 
-      {/* Modal: Cancel / Reverse */}
+      {/* Safe One-Click Transaction Cancellation & Reversal Modal */}
       {cancelModalReceipt && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full border border-slate-200 shadow-xl space-y-4 text-xs">
-            <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
-              <Ban className="w-5 h-5" />
-              <span>{isAr ? 'إلغاء وعكس إذن الإضافة' : 'Cancel & Reverse Receipt'}</span>
-            </div>
-            <p className="text-slate-600 leading-relaxed">
-              {isAr
-                ? `وفقاً لمتطلبات النظام (Section 1): لا يمكن حذف العمليات المرحلة بشكل نهائي. سيتم إنشاء قيد عكسي معتمد وتغيير حالة الإذن ${cancelModalReceipt.receiptNumber} إلى ملغي.`
-                : `Transactions cannot be deleted directly. A reversing entry will be recorded in the ledger.`}
-            </p>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                {isAr ? 'سبب الإلغاء والعكس *' : 'Cancellation Reason *'}
-              </label>
-              <textarea
-                value={cancelReason}
-                onChange={e => setCancelReason(e.target.value)}
-                placeholder={isAr ? 'اكتب سبب إلغاء هذا المستند...' : 'Reason for cancellation...'}
-                className="w-full p-2 rounded-lg border border-slate-200 h-20"
-                required
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setCancelModalReceipt(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
-              >
-                {isAr ? 'تراجع' : 'Close'}
-              </button>
-              <button
-                onClick={handleCancelSubmit}
-                disabled={!cancelReason.trim()}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-50"
-              >
-                {isAr ? 'تأكيد الإلغاء والعكس' : 'Confirm Reversal'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalReceipt(null)}
+          documentType="RECEIPT"
+          documentNumber={cancelModalReceipt.receiptNumber}
+          onSuccess={() => setCancelModalReceipt(null)}
+        />
       )}
 
       {/* Printable Voucher */}

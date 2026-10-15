@@ -187,4 +187,61 @@ export class InventoryValuationService {
 
     return await response.json();
   }
+
+  /**
+   * Reverses an authoritative inventory transaction through the backend valuation engine
+   */
+  public static async reverseTransaction(payload: {
+    documentType: string;
+    documentNumber: string;
+    itemId: string;
+    locationId: string;
+    destLocationId?: string;
+    quantity: number;
+    unitCost?: number;
+    totalValue?: number;
+    landedCostAmount?: number;
+    varianceQuantity?: number;
+    reason: string;
+  }): Promise<{
+    success: boolean;
+    reversalDocumentNumber: string;
+    originalDocumentNumber: string;
+    qtyDelta: number;
+    valueDelta: number;
+    preValuation: { onHandQty: number; inventoryValue: number; movingAverageCost: number };
+    postValuation: { onHandQty: number; inventoryValue: number; movingAverageCost: number };
+    linkedTransferResult?: {
+      destLocationId: string;
+      destPreValuation: { onHandQty: number; inventoryValue: number; movingAverageCost: number };
+      destPostValuation: { onHandQty: number; inventoryValue: number; movingAverageCost: number };
+    };
+    timestamp: string;
+    message: string;
+  }> {
+    const token = authService.getToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch('/api/inventory/cancel-transaction', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Transaction cancellation failed (${response.status})`;
+      try {
+        const err = await response.json();
+        if (err && err.error) errorMsg = err.error;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+
+    return await response.json();
+  }
 }

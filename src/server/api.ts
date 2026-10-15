@@ -14,8 +14,7 @@ import { INITIAL_USERS } from '../data/initialData.ts';
 import { SEED_USERS, SEED_RAW_MATERIALS, SEED_PRODUCTS } from '../data/seedData.ts';
 import { UserRole, User } from '../types.ts';
 import { RBAC_ROLE_DEFINITIONS, getEffectivePermissions } from '../utils/rbac.ts';
-import { SAP_TRANSACTION_RULES, SapTransactionCode } from '../config/transactionConfig.ts';
-import { ValuationEngine, InventoryPostingPayload } from './valuationEngine.ts';
+import { ValuationEngine, InventoryPostingPayload, ReversalPostingPayload } from './valuationEngine.ts';
 
 // Initialize authoritative balances from initial/seed items on module load
 ValuationEngine.initializeFromItems([...SEED_RAW_MATERIALS, ...SEED_PRODUCTS]);
@@ -414,6 +413,56 @@ router.post('/inventory/post-transaction', authenticateToken, async (req: Reques
     return res.status(200).json(result);
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Transaction posting failed.' });
+  }
+});
+
+// POST /api/inventory/cancel-transaction (One-Click Safe Inventory Cancellation & Reversal)
+router.post('/inventory/cancel-transaction', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const payload: ReversalPostingPayload = req.body;
+    const user = (req as any).user;
+
+    if (!payload.documentNumber || !payload.documentType || !payload.itemId || !payload.locationId) {
+      return res.status(400).json({ error: 'documentNumber, documentType, itemId, and locationId are required.' });
+    }
+
+    if (!payload.reason || !payload.reason.trim()) {
+      return res.status(400).json({ error: 'Cancellation reason is mandatory for audit and compliance.' });
+    }
+
+    payload.userId = user?.id || 'system';
+    payload.userName = user?.fullName || 'System User';
+
+    const result = await ValuationEngine.reverseTransaction(payload);
+
+    // Persist reversal in DB audit log if connected
+    const db = getDb();
+    if (db && isDbConnected()) {
+      try {
+        await (db.insert(auditLogsTable as any) as any).values({
+          id: `audit-${Date.now()}`,
+          timestamp: new Date(),
+          userId: user?.id || 'system',
+          action: 'REVERSE_TRANSACTION',
+          entityType: payload.documentType,
+          entityId: payload.documentNumber,
+          details: {
+            reason: payload.reason,
+            reversalNumber: result.reversalDocumentNumber,
+            qtyDelta: result.qtyDelta,
+            valueDelta: result.valueDelta,
+            preValuation: result.preValuation,
+            postValuation: result.postValuation
+          }
+        });
+      } catch (err: any) {
+        console.warn('DB audit log note:', err?.message);
+      }
+    }
+
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Transaction cancellation failed.' });
   }
 });
 

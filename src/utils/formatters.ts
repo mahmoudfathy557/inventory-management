@@ -55,3 +55,11 @@ export const exportToExcel = exportToCSV;
 export const triggerPrint = () => {
   window.print();
 };
+
+export const round4 = (value: number): number => {
+  return Math.round((value + Number.EPSILON) * 10000) / 10000;
+};
+
+export const round2 = (value: number): number => {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+};

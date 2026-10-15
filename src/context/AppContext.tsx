@@ -85,6 +85,8 @@ import {
 import { odooService } from '../services/odooService';
 import { authService } from '../services/authService';
 import { offlineSyncQueue } from '../services/offlineSyncQueue';
+import { TransactionCancellationService, CancellationPreview } from '../services/transactionCancellationService';
+import { InventoryValuationService } from '../services/inventoryValuationService';
 import { CompanyBranding, DEFAULT_BRANDING, getCompanyBranding, setCompanyBranding } from '../config/branding';
 import { parseApiResponse, safeFetchWithRetry } from '../utils/apiClient';
 import {
@@ -182,7 +184,9 @@ interface AppContextType {
   approveQuality: (productionOrderId: string, decision: QualityStatus, reason: string) => void;
   addCustomerDelivery: (delivery: Omit<CustomerDelivery, 'id' | 'deliveryNumber' | 'createdDate' | 'status'>) => CustomerDelivery;
   addCostAdjustment: (adjustment: Omit<ProductionOrderCostAdjustment, 'id' | 'adjustmentNumber' | 'status' | 'originalProductionCostEGP' | 'revisedProductionCostEGP' | 'quantityProduced' | 'quantityInStock' | 'quantityIssuedOrSold' | 'inventoryAdjustmentEGP' | 'cogsAdjustmentEGP'>) => ProductionOrderCostAdjustment;
-  cancelTransaction: (documentType: string, documentNumber: string, reason: string) => void;
+  cancelTransaction: (documentType: string, documentNumber: string, reason: string, options?: { cascade?: boolean }) => Promise<{ success: boolean; message: string; reversalNumber?: string }>;
+  inspectCancellation: (documentType: string, documentNumber: string) => CancellationPreview;
+  deleteDraftTransaction: (documentType: string, documentNumber: string) => Promise<{ success: boolean; message: string }>;
   resetToSampleMVP: () => void;
   seedFullCoverageData: () => void;
 
@@ -1928,50 +1932,306 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newAdjustment;
   };
 
-  // 11. CANCEL / REVERSE TRANSACTION (Section 1: Posted transactions cannot be deleted; use Cancel / Reverse)
-  const cancelTransaction = (docType: string, docNum: string, reason: string) => {
-    // Record Reversal in Audit Trail
-    logAudit('REVERSE_TRANSACTION', docType, docNum, `إلغاء وعكس العملية المستندية: ${reason}`);
+  // -------------------------------------------------------------
+  // ONE-CLICK TRANSACTION CANCELLATION, REVERSAL & DRAFT DELETION
+  // -------------------------------------------------------------
 
-    // Update status in respective table
-    if (docType.includes('إذن إضافة') || docType.includes('Receipt')) {
-      setReceipts(prev => prev.map(r => r.receiptNumber === docNum ? { ...r, status: 'CANCELLED' } : r));
-    } else if (docType.includes('إنزال') || docType.includes('Landed')) {
-      setLandedCosts(prev => prev.map(lc => lc.landedCostNumber === docNum ? { ...lc, status: 'CANCELLED' } : lc));
-    } else if (docType.includes('صرف') || docType.includes('Issue')) {
-      setIssues(prev => prev.map(i => i.issueNumber === docNum ? { ...i, status: 'CANCELLED' } : i));
-    } else if (docType.includes('تحويل') || docType.includes('Transfer')) {
-      setTransfers(prev => prev.map(t => t.transferNumber === docNum ? { ...t, status: 'CANCELLED' } : t));
-    } else if (docType.includes('أمر إنتاج') || docType.includes('Production Order')) {
-      setProductionOrders(prev => prev.map(po => po.orderNumber === docNum ? { ...po, status: ProductionOrderStatus.CANCELLED } : po));
-    } else if (docType.includes('تسليم عميل') || docType.includes('Delivery')) {
-      setCustomerDeliveries(prev => prev.map(d => d.deliveryNumber === docNum ? { ...d, status: 'CANCELLED' } : d));
+  const inspectCancellation = (documentType: string, documentNumber: string): CancellationPreview => {
+    return TransactionCancellationService.inspectTransaction(documentType, documentNumber, {
+      receipts,
+      issues,
+      transfers,
+      productionOrders,
+      materialIssues,
+      productionReceipts,
+      customerDeliveries,
+      landedCosts,
+      countPostings,
+      revaluations,
+      returnsToVendor,
+      returnsFromCustomer,
+      costAdjustments,
+      rawMaterials,
+      products,
+      warehouses,
+      getItemWarehouseValuation
+    });
+  };
+
+  const deleteDraftTransaction = async (documentType: string, documentNumber: string): Promise<{ success: boolean; message: string }> => {
+    const preview = inspectCancellation(documentType, documentNumber);
+    if (!preview.found) {
+      throw new Error(`Document ${documentNumber} not found.`);
+    }
+    if (!preview.isDraft) {
+      throw new Error(`Document ${documentNumber} is not a draft. Posted transactions must be cancelled and reversed, not deleted.`);
     }
 
-    // Add REVERSAL ledger entry to keep history clean and transparent
-    const ledgerEntry: InventoryLedgerEntry = {
-      id: 'ledg-rev-' + Date.now(),
-      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      itemId: 'REVERSAL',
-      itemCode: 'REV',
-      itemName: `عكس قيد ${docType} ${docNum}`,
-      itemType: ItemType.RAW_MATERIAL,
-      warehouseId: 'REV',
-      warehouseName: 'قيد عكسي',
-      transactionType: TransactionType.REVERSAL,
-      documentNumber: docNum,
-      reference: 'إلغاء مستند',
-      qtyIn: 0,
-      qtyOut: 0,
-      balanceQty: 0,
-      unitCostEGP: 0,
-      transactionValueEGP: 0,
-      runningInventoryValueEGP: 0,
-      movingAverageCostEGP: 0,
-      createdBy: currentUser?.fullName || 'System User',
-      notes: `تم الإلغاء والعكس بسبب: ${reason}`
+    // Safely remove draft
+    const typeKey = (preview.documentType || '').toUpperCase();
+    if (typeKey.includes('PRODUCTION_ORDER')) {
+      setProductionOrders(prev => prev.filter(po => po.orderNumber !== preview.documentNumber && po.id !== preview.documentId));
+    } else if (typeKey.includes('COST_ADJUSTMENT')) {
+      setCostAdjustments(prev => prev.filter(ca => ca.adjustmentNumber !== preview.documentNumber && ca.id !== preview.documentId));
+    }
+
+    logAudit('DELETE_DRAFT', preview.documentTypeAr, preview.documentNumber, `حذف مسودة مستند غير مرحلة نهائياً دون التأثير على المخزون أو دفتر الأستاذ`);
+
+    return {
+      success: true,
+      message: language === 'ar' ? `تم حذف مسودة المستند ${preview.documentNumber} بنجاح دون أي أثر مخزني.` : `Draft ${preview.documentNumber} deleted safely with zero inventory impact.`
     };
-    setLedgerEntries(prev => [...prev, ledgerEntry]);
+  };
+
+  const cancelTransaction = async (
+    docType: string,
+    docNum: string,
+    reason: string,
+    options?: { cascade?: boolean }
+  ): Promise<{ success: boolean; message: string; reversalNumber?: string }> => {
+    if (!reason || !reason.trim()) {
+      throw new Error(language === 'ar' ? 'سبب الإلغاء والعكس إلزامي للأغراض الرقابية والمحاسبية.' : 'Cancellation reason is mandatory for audit compliance.');
+    }
+
+    const preview = inspectCancellation(docType, docNum);
+    if (!preview.found) {
+      throw new Error(language === 'ar' ? `لم يتم العثور على المستند ${docNum}` : `Document ${docNum} not found.`);
+    }
+
+    if (preview.isCancelled) {
+      return {
+        success: true,
+        message: language === 'ar' ? `المستند ${docNum} ملغي بالفعل مسبقاً.` : `Document ${docNum} is already cancelled.`
+      };
+    }
+
+    if (!preview.canExecute) {
+      const err = language === 'ar'
+        ? (preview.blockingReasonsAr[0] || 'لا يمكن إلغاء هذه الحركة لوجود موانع رقابية.')
+        : (preview.blockingReasonsEn[0] || 'Cannot cancel transaction due to integrity constraints.');
+      throw new Error(err);
+    }
+
+    // If draft, route to draft deletion
+    if (preview.isDraft) {
+      return await deleteDraftTransaction(docType, docNum);
+    }
+
+    // Handle cascading dependent documents if requested and supported
+    if (preview.dependencies.length > 0) {
+      if (options?.cascade && preview.canCascadeAll) {
+        for (const dep of preview.dependencies) {
+          if (dep.documentType === 'LANDED_COST') {
+            setLandedCosts(prev => prev.map(lc => lc.landedCostNumber === dep.documentNumber ? { ...lc, status: 'CANCELLED' } : lc));
+            logAudit('REVERSE_TRANSACTION', dep.documentTypeAr, dep.documentNumber, `إلغاء تكلفة الإنزال بالتبعية لإلغاء الإذن الأصلي ${docNum}`);
+          }
+        }
+      } else if (!options?.cascade && preview.dependencies.some(d => !d.canCascade)) {
+        throw new Error(language === 'ar' ? preview.blockingReasonsAr[0] || 'توجد مستندات تابعة تمنع الإلغاء' : preview.blockingReasonsEn[0] || 'Dependent documents block cancellation');
+      }
+    }
+
+    const reversalDocNum = `REV-${preview.documentNumber}`;
+    const timestampStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
+    // Apply primary warehouse stock adjustment
+    if (preview.primaryImpact) {
+      const pi = preview.primaryImpact;
+      const targetWh = warehouses.find(w => w.id === pi.warehouseId);
+      const whName = targetWh ? (language === 'ar' ? targetWh.nameAr : targetWh.nameEn) : pi.warehouseId;
+
+      const updateItemStock = (item: RawMaterial | Product) => {
+        const existingStock = item.warehouseStock || {};
+        const updatedStock: Record<string, ItemWarehouseStock> = {
+          ...existingStock,
+          [pi.warehouseId]: {
+            warehouseId: pi.warehouseId,
+            warehouseName: whName,
+            currentQty: Math.max(0, pi.postOnHand),
+            movingAverageCost: pi.postMAC,
+            totalValue: Math.max(0, pi.postValue)
+          }
+        };
+        const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+        const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+        const totalMAC = totalQty > 0 ? (totalVal / totalQty) : 0;
+        return {
+          ...item,
+          currentQty: totalQty,
+          totalValue: totalVal,
+          movingAverageCost: totalMAC,
+          warehouseStock: updatedStock
+        };
+      };
+
+      if (rawMaterials.some(m => m.id === pi.itemId)) {
+        setRawMaterials(prev => prev.map(m => m.id === pi.itemId ? (updateItemStock(m) as RawMaterial) : m));
+      } else {
+        setProducts(prev => prev.map(p => p.id === pi.itemId ? (updateItemStock(p) as Product) : p));
+      }
+
+      // Append authoritative primary REVERSAL ledger entry
+      const ledgerEntry1: InventoryLedgerEntry = {
+        id: 'ledg-rev-' + Date.now(),
+        date: timestampStr,
+        itemId: pi.itemId,
+        itemCode: pi.itemCode,
+        itemName: pi.itemName,
+        itemType: rawMaterials.some(m => m.id === pi.itemId) ? ItemType.RAW_MATERIAL : ItemType.FINISHED_PRODUCT,
+        warehouseId: pi.warehouseId,
+        warehouseName: whName,
+        transactionType: TransactionType.REVERSAL,
+        documentNumber: reversalDocNum,
+        reference: `عكس قيد: ${preview.documentNumber}`,
+        uom: pi.uom,
+        qtyIn: pi.qtyDelta > 0 ? pi.qtyDelta : 0,
+        qtyOut: pi.qtyDelta < 0 ? Math.abs(pi.qtyDelta) : 0,
+        balanceQty: Math.max(0, pi.postOnHand),
+        unitCostEGP: preview.transactedUnitCost,
+        transactionValueEGP: Math.abs(pi.valueDelta),
+        runningInventoryValueEGP: Math.max(0, pi.postValue),
+        movingAverageCostEGP: pi.postMAC,
+        createdBy: currentUser?.fullName || 'System User',
+        notes: `عكس وإلغاء معتمد: ${reason}`
+      };
+      setLedgerEntries(prev => [...prev, ledgerEntry1]);
+    }
+
+    // Apply secondary warehouse stock adjustment (for Transfers)
+    if (preview.secondaryImpact) {
+      const si = preview.secondaryImpact;
+      const secWh = warehouses.find(w => w.id === si.warehouseId);
+      const secWhName = secWh ? (language === 'ar' ? secWh.nameAr : secWh.nameEn) : si.warehouseId;
+
+      const updateSecItemStock = (item: RawMaterial | Product) => {
+        const existingStock = item.warehouseStock || {};
+        const updatedStock: Record<string, ItemWarehouseStock> = {
+          ...existingStock,
+          [si.warehouseId]: {
+            warehouseId: si.warehouseId,
+            warehouseName: secWhName,
+            currentQty: Math.max(0, si.postOnHand),
+            movingAverageCost: si.postMAC,
+            totalValue: Math.max(0, si.postValue)
+          }
+        };
+        const totalQty = Object.values(updatedStock).reduce((s, w) => s + w.currentQty, 0);
+        const totalVal = Object.values(updatedStock).reduce((s, w) => s + w.totalValue, 0);
+        const totalMAC = totalQty > 0 ? (totalVal / totalQty) : 0;
+        return {
+          ...item,
+          currentQty: totalQty,
+          totalValue: totalVal,
+          movingAverageCost: totalMAC,
+          warehouseStock: updatedStock
+        };
+      };
+
+      if (rawMaterials.some(m => m.id === si.itemId)) {
+        setRawMaterials(prev => prev.map(m => m.id === si.itemId ? (updateSecItemStock(m) as RawMaterial) : m));
+      } else {
+        setProducts(prev => prev.map(p => p.id === si.itemId ? (updateSecItemStock(p) as Product) : p));
+      }
+
+      const ledgerEntry2: InventoryLedgerEntry = {
+        id: 'ledg-rev2-' + (Date.now() + 1),
+        date: timestampStr,
+        itemId: si.itemId,
+        itemCode: si.itemCode,
+        itemName: si.itemName,
+        itemType: rawMaterials.some(m => m.id === si.itemId) ? ItemType.RAW_MATERIAL : ItemType.FINISHED_PRODUCT,
+        warehouseId: si.warehouseId,
+        warehouseName: secWhName,
+        transactionType: TransactionType.REVERSAL,
+        documentNumber: reversalDocNum,
+        reference: `عكس طرف التحويل: ${preview.documentNumber}`,
+        uom: si.uom,
+        qtyIn: si.qtyDelta > 0 ? si.qtyDelta : 0,
+        qtyOut: si.qtyDelta < 0 ? Math.abs(si.qtyDelta) : 0,
+        balanceQty: Math.max(0, si.postOnHand),
+        unitCostEGP: preview.transactedUnitCost,
+        transactionValueEGP: Math.abs(si.valueDelta),
+        runningInventoryValueEGP: Math.max(0, si.postValue),
+        movingAverageCostEGP: si.postMAC,
+        createdBy: currentUser?.fullName || 'System User',
+        notes: `عكس طرف التحويل لمستودع الصرف: ${reason}`
+      };
+      setLedgerEntries(prev => [...prev, ledgerEntry2]);
+    }
+
+    // Update document status in its specific table
+    const typeUpper = (preview.documentType || '').toUpperCase();
+    if (typeUpper.includes('RECEIPT')) {
+      setReceipts(prev => prev.map(r => r.receiptNumber === preview.documentNumber || r.id === preview.documentId ? { ...r, status: 'CANCELLED' } : r));
+    } else if (typeUpper.includes('LANDED_COST')) {
+      setLandedCosts(prev => prev.map(lc => lc.landedCostNumber === preview.documentNumber || lc.id === preview.documentId ? { ...lc, status: 'CANCELLED' } : lc));
+      const originalReceipt = receipts.find(r => r.receiptNumber === preview.dependencies[0]?.documentNumber);
+      if (originalReceipt) {
+        setReceipts(prev => prev.map(r => r.id === originalReceipt.id ? { ...r, landedCostAllocatedEGP: 0 } : r));
+      }
+    } else if (typeUpper.includes('ISSUE')) {
+      setIssues(prev => prev.map(i => i.issueNumber === preview.documentNumber || i.id === preview.documentId ? { ...i, status: 'CANCELLED' } : i));
+    } else if (typeUpper.includes('TRANSFER')) {
+      setTransfers(prev => prev.map(t => t.transferNumber === preview.documentNumber || t.id === preview.documentId ? { ...t, status: 'CANCELLED' } : t));
+    } else if (typeUpper.includes('PRODUCTION_ORDER')) {
+      setProductionOrders(prev => prev.map(po => po.orderNumber === preview.documentNumber || po.id === preview.documentId ? { ...po, status: ProductionOrderStatus.CANCELLED } : po));
+    } else if (typeUpper.includes('MATERIAL_ISSUE')) {
+      setMaterialIssues(prev => prev.map(mi => mi.issueNumber === preview.documentNumber || mi.id === preview.documentId ? { ...mi, status: 'CANCELLED' } : mi));
+    } else if (typeUpper.includes('PRODUCTION_RECEIPT')) {
+      setProductionReceipts(prev => prev.map(pr => pr.receiptNumber === preview.documentNumber || pr.id === preview.documentId ? { ...pr, status: 'CANCELLED' } : pr));
+      const pr = productionReceipts.find(p => p.receiptNumber === preview.documentNumber);
+      if (pr) {
+        setProductionOrders(prev => prev.map(po => (po.id === pr.productionOrderId || po.orderNumber === pr.productionOrderNumber) ? {
+          ...po,
+          status: ProductionOrderStatus.IN_PRODUCTION,
+          actualFinishedQuantity: Math.max(0, po.actualFinishedQuantity - pr.finishedQuantity)
+        } : po));
+      }
+    } else if (typeUpper.includes('CUSTOMER_DELIVERY')) {
+      setCustomerDeliveries(prev => prev.map(d => d.deliveryNumber === preview.documentNumber || d.id === preview.documentId ? { ...d, status: 'CANCELLED' } : d));
+    } else if (typeUpper.includes('COUNT_POSTING')) {
+      setCountPostings(prev => prev.map(cp => cp.countNumber === preview.documentNumber || cp.id === preview.documentId ? { ...cp, status: 'CANCELLED' } : cp));
+    } else if (typeUpper.includes('REVALUATION')) {
+      setRevaluations(prev => prev.map(rv => rv.revaluationNumber === preview.documentNumber || rv.id === preview.documentId ? { ...rv, status: 'CANCELLED' } : rv));
+    } else if (typeUpper.includes('RETURN_TO_VENDOR')) {
+      setReturnsToVendor(prev => prev.map(rtv => rtv.returnNumber === preview.documentNumber || rtv.id === preview.documentId ? { ...rtv, status: 'CANCELLED' } : rtv));
+    } else if (typeUpper.includes('RETURN_FROM_CUSTOMER')) {
+      setReturnsFromCustomer(prev => prev.map(rfc => rfc.returnNumber === preview.documentNumber || rfc.id === preview.documentId ? { ...rfc, status: 'CANCELLED' } : rfc));
+    }
+
+    // Audit Trail Logging
+    logAudit(
+      'REVERSE_TRANSACTION',
+      preview.documentTypeAr,
+      preview.documentNumber,
+      `إلغاء وعكس العملية المستندية: ${reason}. رقم القيد العكسي: ${reversalDocNum}`
+    );
+
+    // Call backend engine in background
+    if (preview.primaryImpact) {
+      InventoryValuationService.reverseTransaction({
+        documentType: preview.documentType,
+        documentNumber: preview.documentNumber,
+        itemId: preview.primaryImpact.itemId,
+        locationId: preview.primaryImpact.warehouseId,
+        destLocationId: preview.secondaryImpact?.warehouseId,
+        quantity: Math.abs(preview.primaryImpact.qtyDelta),
+        unitCost: preview.transactedUnitCost,
+        totalValue: Math.abs(preview.primaryImpact.valueDelta),
+        landedCostAmount: typeUpper.includes('LANDED_COST') ? preview.transactedTotalValue : undefined,
+        reason
+      }).catch(err => {
+        console.warn('Backend valuation engine reversal note:', err?.message);
+      });
+    }
+
+    return {
+      success: true,
+      reversalNumber: reversalDocNum,
+      message: language === 'ar'
+        ? `تم إلغاء وعكس العملية ${preview.documentNumber} بنجاح برقم قيد عكسي (${reversalDocNum}).`
+        : `Transaction ${preview.documentNumber} cancelled and reversed successfully (Reversal No: ${reversalDocNum}).`
+    };
   };
 
   // 12. SAP B1 TYPE 9: COUNT POSTING (Physical Inventory Variance)
@@ -3028,6 +3288,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addCustomerDelivery,
         addCostAdjustment,
         cancelTransaction,
+        inspectCancellation,
+        deleteDraftTransaction,
         resetToSampleMVP,
         saveRawMaterial,
         deleteRawMaterial,
