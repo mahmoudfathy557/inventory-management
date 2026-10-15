@@ -16,6 +16,7 @@ import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
+import { LocationValuationCard } from '../components/common/LocationValuationCard';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryReceipt, ItemType } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -40,7 +41,8 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
     currencies,
     uoms,
     currentUser,
-    getExchangeRateForDate
+    getExchangeRateForDate,
+    getItemWarehouseValuation
   } = useApp();
   const isAr = language === 'ar';
 
@@ -106,6 +108,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
   const [cancelReason, setCancelReason] = useState('');
 
   // Form State
+  const [receiptType, setReceiptType] = useState<'GOODS_RECEIPT_PO' | 'RECEIPT'>('GOODS_RECEIPT_PO');
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedItemId, setSelectedItemId] = useState(rawMaterials[0]?.id || '');
   const [selectedSupplierId, setSelectedSupplierId] = useState(suppliers[0]?.id || '');
@@ -136,15 +139,18 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
   const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
   const baseQuantity = quantity * conversionFactor;
 
-  // Moving Average Simulation in Modal
+  // Moving Average Simulation in Modal strictly based on destination location balance
   const unitPriceEGP = unitPrice * exchangeRate;
   const totalValueEGP = quantity * unitPriceEGP;
 
-  const currentItemQty = selectedItem?.currentQty || 0;
-  const currentItemVal = selectedItem?.totalValue || 0;
-  const simulatedNewQty = currentItemQty + baseQuantity;
-  const simulatedNewVal = currentItemVal + totalValueEGP;
-  const simulatedNewMAC = simulatedNewQty > 0 ? simulatedNewVal / simulatedNewQty : 0;
+  const targetWhStock = getItemWarehouseValuation(selectedItemId, selectedWarehouseId);
+  const locationOnHand = targetWhStock.currentQty || 0;
+  const locationValue = targetWhStock.totalValue || 0;
+  const locationMAC = targetWhStock.movingAverageCost || 0;
+
+  const simulatedNewQty = locationOnHand + baseQuantity;
+  const simulatedNewVal = locationValue + totalValueEGP;
+  const simulatedNewMAC = simulatedNewQty > 0 ? (simulatedNewVal / simulatedNewQty) : unitPriceEGP;
 
   const handleCurrencyChange = (currCode: string) => {
     setSelectedCurrency(currCode);
@@ -632,11 +638,11 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
                   <span>{isAr ? 'محاكاة إعادة احتساب متوسط التكلفة المتحرك (Moving Average Cost)' : 'Moving Average Calculation Preview'}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-[11px] font-mono border-t border-blue-200/60 pt-2">
-                  <div>
-                    <span className="text-slate-500">{isAr ? 'الرصيد السابق (موحد):' : 'Prev Stock:'}</span>
-                    <div className="font-bold">{formatNumber(currentItemQty, language)} {itemBaseUOM}</div>
-                    <div className="text-slate-500 text-[10px]">{formatCurrency(selectedItem?.movingAverageCost || 0, language)}/{itemBaseUOM}</div>
-                  </div>
+                    <div>
+                      <span className="text-slate-500">{isAr ? 'الرصيد السابق بالموقع:' : 'Prev Location Stock:'}</span>
+                      <div className="font-bold">{formatNumber(locationOnHand, language)} {itemBaseUOM}</div>
+                      <div className="text-slate-500 text-[10px]">{formatCurrency(locationMAC, language)}/{itemBaseUOM}</div>
+                    </div>
                   <div>
                     <span className="text-slate-500">{isAr ? 'الإضافة الحالية (موحد):' : 'Addition:'}</span>
                     <div className="font-bold text-emerald-700">+{formatNumber(baseQuantity, language)} {itemBaseUOM}</div>

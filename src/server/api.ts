@@ -2,12 +2,23 @@ import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { getDb, isDbConnected, initDatabase } from '../db/index.ts';
-import { users as usersTable, appEntities as appEntitiesTable, auditLogs as auditLogsTable } from '../db/schema.ts';
+import {
+  users as usersTable,
+  appEntities as appEntitiesTable,
+  auditLogs as auditLogsTable,
+  itemLocationBalances as itemLocationBalancesTable,
+  inventoryTransactions as inventoryTransactionsTable
+} from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
 import { INITIAL_USERS } from '../data/initialData.ts';
-import { SEED_USERS } from '../data/seedData.ts';
+import { SEED_USERS, SEED_RAW_MATERIALS, SEED_PRODUCTS } from '../data/seedData.ts';
 import { UserRole, User } from '../types.ts';
 import { RBAC_ROLE_DEFINITIONS, getEffectivePermissions } from '../utils/rbac.ts';
+import { SAP_TRANSACTION_RULES, SapTransactionCode } from '../config/transactionConfig.ts';
+import { ValuationEngine, InventoryPostingPayload } from './valuationEngine.ts';
+
+// Initialize authoritative balances from initial/seed items on module load
+ValuationEngine.initializeFromItems([...SEED_RAW_MATERIALS, ...SEED_PRODUCTS]);
 
 const router = express.Router();
 const JWT_SECRET =
@@ -244,6 +255,234 @@ router.get('/auth/rbac/roles', (req: Request, res: Response) => {
     roles: Object.values(RBAC_ROLE_DEFINITIONS),
     summary: 'Standard Enterprise ERP & Manufacturing RBAC with Separation of Duties'
   });
+});
+
+// -------------------------------------------------------------
+// SAP BUSINESS ONE INVENTORY VALUATION & COSTING API
+// -------------------------------------------------------------
+
+// GET /api/inventory/transaction-rules (Centralized Transaction Matrix)
+router.get('/inventory/transaction-rules', (req: Request, res: Response) => {
+  return res.json({
+    rules: SAP_TRANSACTION_RULES,
+    totalTransactionTypes: Object.keys(SAP_TRANSACTION_RULES).length
+  });
+});
+
+// GET /api/inventory/balances (All Item + Location Balances)
+router.get('/inventory/balances', async (req: Request, res: Response) => {
+  const db = getDb();
+  if (db && isDbConnected()) {
+    try {
+      const records = await db.select().from(itemLocationBalancesTable);
+      if (records && records.length > 0) {
+        return res.json({ balances: records, source: 'postgresql' });
+      }
+    } catch (err: any) {
+      console.warn('DB read itemLocationBalances failed:', err?.message);
+    }
+  }
+  return res.json({ balances: ValuationEngine.getAllBalances(), source: 'engine' });
+});
+
+// GET /api/inventory/balances/:itemId/:locationId (Specific Item + Location Balance)
+router.get('/inventory/balances/:itemId/:locationId', async (req: Request, res: Response) => {
+  const { itemId, locationId } = req.params;
+  const db = getDb();
+  if (db && isDbConnected()) {
+    try {
+      const record = await db
+        .select()
+        .from(itemLocationBalancesTable)
+        .where(eq(itemLocationBalancesTable.id, `${itemId}:::${locationId}`));
+      if (record && record.length > 0) {
+        return res.json({ balance: record[0], source: 'postgresql' });
+      }
+    } catch (err: any) {
+      console.warn('DB read itemLocationBalance failed:', err?.message);
+    }
+  }
+  const balance = ValuationEngine.getBalance(itemId, locationId);
+  return res.json({ balance, source: 'engine' });
+});
+
+// POST /api/inventory/post-transaction (Authoritative Inventory Movement & Costing)
+router.post('/inventory/post-transaction', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const payload = req.body as InventoryPostingPayload;
+    const user = (req as any).user;
+    payload.userId = user?.id;
+    payload.userName = user?.fullName;
+
+    const result = await ValuationEngine.processTransaction(payload, {
+      allLedgerEntries: inMemoryEntities['ledgerEntries'],
+      allReceipts: inMemoryEntities['receipts'],
+      allDeliveries: inMemoryEntities['customerDeliveries'],
+      allProductionOrders: inMemoryEntities['productionOrders'],
+      allMaterialIssues: inMemoryEntities['materialIssues'],
+      allProductionReceipts: inMemoryEntities['productionReceipts'],
+      allReturnsToVendor: inMemoryEntities['returnsToVendor'],
+      allReturnsFromCustomer: inMemoryEntities['returnsFromCustomer'],
+    });
+
+    // Persist to PostgreSQL if connected
+    const db = getDb();
+    if (db && isDbConnected()) {
+      try {
+        await (db.insert(itemLocationBalancesTable as any) as any)
+          .values({
+            id: `${payload.itemId}:::${payload.locationId}`,
+            itemId: payload.itemId,
+            locationId: payload.locationId,
+            warehouseId: payload.warehouseId || payload.locationId,
+            onHandQty: result.postValuation.onHandQty,
+            inventoryValue: result.postValuation.inventoryValue,
+            movingAverageCost: result.postValuation.movingAverageCost,
+            lastDocumentNumber: result.documentNumber,
+            updatedAt: new Date()
+          })
+          .onConflictDoUpdate({
+            target: itemLocationBalancesTable.id,
+            set: {
+              onHandQty: result.postValuation.onHandQty,
+              inventoryValue: result.postValuation.inventoryValue,
+              movingAverageCost: result.postValuation.movingAverageCost,
+              lastDocumentNumber: result.documentNumber,
+              updatedAt: new Date()
+            }
+          });
+
+        if (result.linkedTransferResult) {
+          const dest = result.linkedTransferResult;
+          await (db.insert(itemLocationBalancesTable as any) as any)
+            .values({
+              id: `${payload.itemId}:::${dest.destLocationId}`,
+              itemId: payload.itemId,
+              locationId: dest.destLocationId,
+              warehouseId: payload.destWarehouseId || dest.destLocationId,
+              onHandQty: dest.destPostValuation.onHandQty,
+              inventoryValue: dest.destPostValuation.inventoryValue,
+              movingAverageCost: dest.destPostValuation.movingAverageCost,
+              lastDocumentNumber: result.documentNumber,
+              updatedAt: new Date()
+            })
+            .onConflictDoUpdate({
+              target: itemLocationBalancesTable.id,
+              set: {
+                onHandQty: dest.destPostValuation.onHandQty,
+                inventoryValue: dest.destPostValuation.inventoryValue,
+                movingAverageCost: dest.destPostValuation.movingAverageCost,
+                lastDocumentNumber: result.documentNumber,
+                updatedAt: new Date()
+              }
+            });
+        }
+
+        await (db.insert(inventoryTransactionsTable as any) as any).values({
+          id: result.transactionId,
+          transactionCode: result.transactionCode,
+          transactionType: result.transactionType,
+          documentNumber: result.documentNumber,
+          itemId: payload.itemId,
+          itemCode: payload.itemCode,
+          itemName: payload.itemName,
+          locationId: payload.locationId,
+          destLocationId: payload.destLocationId || null,
+          quantity: result.quantity,
+          unitCost: result.unitCost,
+          totalValue: result.totalValue,
+          preOnHandQty: result.preValuation.onHandQty,
+          preInventoryValue: result.preValuation.inventoryValue,
+          preMovingAverageCost: result.preValuation.movingAverageCost,
+          postOnHandQty: result.postValuation.onHandQty,
+          postInventoryValue: result.postValuation.inventoryValue,
+          postMovingAverageCost: result.postValuation.movingAverageCost,
+          sourceDocumentType: payload.sourceDocumentType || null,
+          sourceDocumentNumber: payload.sourceDocumentNumber || null,
+          sourceDocumentId: payload.sourceDocumentId || null,
+          reference: payload.reference || null,
+          notes: payload.notes || null,
+          status: 'POSTED',
+          createdBy: user?.fullName || 'system',
+          createdAt: new Date()
+        });
+      } catch (dbErr: any) {
+        console.warn('DB transaction persist note:', dbErr?.message);
+      }
+    }
+
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Transaction posting failed.' });
+  }
+});
+
+// POST /api/inventory/reconcile (SAP Business One Moving Average Cost Reconciliation)
+router.post('/inventory/reconcile', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    let ledger = inMemoryEntities['ledgerEntries'] || [];
+    let materials = inMemoryEntities['rawMaterials'] || [];
+    let prods = inMemoryEntities['products'] || [];
+
+    if (db && isDbConnected()) {
+      try {
+        const dbLedger = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, 'ledgerEntries'));
+        if (dbLedger.length > 0 && Array.isArray(dbLedger[0].data)) {
+          ledger = dbLedger[0].data;
+        }
+        const dbMats = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, 'rawMaterials'));
+        if (dbMats.length > 0 && Array.isArray(dbMats[0].data)) {
+          materials = dbMats[0].data;
+        }
+        const dbProds = await db.select().from(appEntitiesTable).where(eq(appEntitiesTable.entityType, 'products'));
+        if (dbProds.length > 0 && Array.isArray(dbProds[0].data)) {
+          prods = dbProds[0].data;
+        }
+      } catch (err: any) {
+        console.warn('DB read during reconciliation:', err?.message);
+      }
+    }
+
+    const items = [...materials, ...prods];
+    const report = ValuationEngine.reconcileLocationBalances(ledger, items);
+
+    // If PostgreSQL is connected, sync reconciled balances into item_location_balances
+    if (db && isDbConnected()) {
+      try {
+        for (const bal of report.reconciledBalances) {
+          await (db.insert(itemLocationBalancesTable as any) as any)
+            .values({
+              id: `${bal.itemId}:::${bal.locationId}`,
+              itemId: bal.itemId,
+              locationId: bal.locationId,
+              warehouseId: bal.warehouseId || bal.locationId,
+              onHandQty: bal.onHandQty,
+              inventoryValue: bal.inventoryValue,
+              movingAverageCost: bal.movingAverageCost,
+              lastDocumentNumber: bal.lastDocumentNumber,
+              updatedAt: new Date()
+            })
+            .onConflictDoUpdate({
+              target: itemLocationBalancesTable.id,
+              set: {
+                onHandQty: bal.onHandQty,
+                inventoryValue: bal.inventoryValue,
+                movingAverageCost: bal.movingAverageCost,
+                lastDocumentNumber: bal.lastDocumentNumber,
+                updatedAt: new Date()
+              }
+            });
+        }
+      } catch (dbErr: any) {
+        console.warn('DB sync during reconciliation:', dbErr?.message);
+      }
+    }
+
+    return res.json({ success: true, report });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Reconciliation failed' });
+  }
 });
 
 // -------------------------------------------------------------

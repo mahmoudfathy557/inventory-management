@@ -152,6 +152,51 @@ export async function initDatabase() {
           created_at timestamp NOT NULL DEFAULT NOW()
         );
       `;
+
+      await sqlClient`
+        CREATE TABLE IF NOT EXISTS item_location_balances (
+          id text PRIMARY KEY,
+          item_id text NOT NULL,
+          location_id text NOT NULL,
+          warehouse_id text NOT NULL,
+          on_hand_qty double precision NOT NULL DEFAULT 0,
+          inventory_value double precision NOT NULL DEFAULT 0,
+          moving_average_cost double precision NOT NULL DEFAULT 0,
+          last_document_number text,
+          updated_at timestamp NOT NULL DEFAULT NOW()
+        );
+      `;
+
+      await sqlClient`
+        CREATE TABLE IF NOT EXISTS inventory_transactions (
+          id text PRIMARY KEY,
+          transaction_code integer NOT NULL,
+          transaction_type text NOT NULL,
+          document_number text NOT NULL,
+          item_id text NOT NULL,
+          item_code text NOT NULL,
+          item_name text NOT NULL,
+          location_id text NOT NULL,
+          dest_location_id text,
+          quantity double precision NOT NULL,
+          unit_cost double precision NOT NULL,
+          total_value double precision NOT NULL,
+          pre_on_hand_qty double precision NOT NULL,
+          pre_inventory_value double precision NOT NULL,
+          pre_moving_average_cost double precision NOT NULL,
+          post_on_hand_qty double precision NOT NULL,
+          post_inventory_value double precision NOT NULL,
+          post_moving_average_cost double precision NOT NULL,
+          source_document_type text,
+          source_document_number text,
+          source_document_id text,
+          reference text,
+          notes text,
+          status text NOT NULL DEFAULT 'POSTED',
+          created_by text NOT NULL,
+          created_at timestamp NOT NULL DEFAULT NOW()
+        );
+      `;
     } catch (tableErr: any) {
       console.warn('Note on table creation (tables may already exist):', tableErr?.message || tableErr);
     }

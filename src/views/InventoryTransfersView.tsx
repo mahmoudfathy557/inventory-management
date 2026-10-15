@@ -21,6 +21,7 @@ import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { BarcodeTransferScannerModal } from '../components/inventory/BarcodeTransferScannerModal';
+import { LocationValuationCard } from '../components/common/LocationValuationCard';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryTransfer } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -40,7 +41,8 @@ export const InventoryTransfersView: React.FC = () => {
     products,
     uoms,
     currentUser,
-    odooConfig
+    odooConfig,
+    getItemWarehouseValuation
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
@@ -131,12 +133,39 @@ export const InventoryTransfersView: React.FC = () => {
   const activeTransactionUOM = selectedUOM || itemBaseUOM;
   const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
   const baseQuantity = quantity * conversionFactor;
-  const unitCostEGP = selectedItem?.movingAverageCost || 110;
+
+  // SAP Business One: Valuation MUST be retrieved from the source Warehouse/Location layer
+  const sourceStock = getItemWarehouseValuation(selectedItemId, fromWhId);
+  const destStock = getItemWarehouseValuation(selectedItemId, toWhId);
+
+  const sourceOnHand = sourceStock.currentQty || 0;
+  const sourceValue = sourceStock.totalValue || 0;
+  const sourceMAC = sourceStock.movingAverageCost || 0;
+
+  const destOnHand = destStock.currentQty || 0;
+  const destValue = destStock.totalValue || 0;
+  const destMAC = destStock.movingAverageCost || 0;
+
+  // Transfer cost MUST be source location's MAC immediately before posting
+  const unitCostEGP = sourceMAC;
   const totalValueEGP = baseQuantity * unitCostEGP;
+
+  const isSameLocation = fromWhId === toWhId;
+  const isInsufficient = baseQuantity > sourceOnHand;
+
+  // Projections
+  const sourceProjectedOnHand = Math.max(0, sourceOnHand - baseQuantity);
+  const sourceProjectedValue = sourceProjectedOnHand === 0 ? 0 : Math.max(0, sourceValue - totalValueEGP);
+  const sourceProjectedMAC = sourceMAC; // Source MAC does not change!
+
+  const destProjectedOnHand = destOnHand + baseQuantity;
+  const destProjectedValue = destValue + totalValueEGP;
+  const destProjectedMAC = destProjectedOnHand > 0 ? (destProjectedValue / destProjectedOnHand) : sourceMAC;
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || quantity <= 0) return;
+    if (isSameLocation || isInsufficient) return;
 
     addTransfer({
       date: new Date().toISOString().split('T')[0],
@@ -438,10 +467,17 @@ export const InventoryTransfersView: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-sky-400" />
-                <h3 className="font-bold text-sm">
-                  {isAr ? 'إصدار إذن تحويل مخزني داخلي' : 'Create Stock Transfer'}
-                </h3>
+                <div className="p-1 rounded bg-sky-500/20 text-sky-400 border border-sky-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
+                  Types 5 & 6 — SAP B1
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">
+                    {isAr ? 'إصدار إذن تحويل مخزني داخلي (Transfer Out & In)' : 'Create Stock Transfer'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {isAr ? 'يتم الصرف بمتوسط تكلفة المصدر وإعادة احتساب متوسط تكلفة الوجهة آلياً' : 'Atomic linked Transfer Out & In using source location MAC'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsCreateOpen(false)}
@@ -473,27 +509,33 @@ export const InventoryTransfersView: React.FC = () => {
                 <select
                   value={selectedItemId}
                   onChange={e => setSelectedItemId(e.target.value)}
-                  className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-sky-500"
                   required
                 >
-                  {rawMaterials.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.nameAr} - الرصيد: {m.currentQty} {m.defaultUOM} (متوسط: {formatCurrency(m.movingAverageCost, language)})
-                    </option>
-                  ))}
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.nameAr} - الرصيد: {p.currentQty} {p.defaultUOM}
-                    </option>
-                  ))}
+                  {rawMaterials.map(m => {
+                    const st = getItemWarehouseValuation(m.id, fromWhId);
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {m.nameAr} - رصيد المصدر: {formatNumber(st.currentQty, language)} {m.defaultUOM} (متوسط: {formatCurrency(st.movingAverageCost, language)})
+                      </option>
+                    );
+                  })}
+                  {products.map(p => {
+                    const st = getItemWarehouseValuation(p.id, fromWhId);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.nameAr} - رصيد المصدر: {formatNumber(st.currentQty, language)} {p.defaultUOM} (متوسط: {formatCurrency(st.movingAverageCost, language)})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              {/* Source & Destination */}
+              {/* Source & Destination Warehouse Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                   <span className="font-bold text-slate-800 block text-xs">
-                    {isAr ? 'المصدر (From):' : 'Source:'}
+                    {isAr ? 'المصدر (From):' : 'Source Location:'}
                   </span>
                   <div>
                     <label className="block text-slate-600 text-[11px] mb-1">
@@ -502,11 +544,11 @@ export const InventoryTransfersView: React.FC = () => {
                     <select
                       value={fromWhId}
                       onChange={e => setFromWhId(e.target.value)}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                      className="w-full p-2 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-sky-500"
                     >
                       {warehouses.map(w => (
                         <option key={w.id} value={w.id}>
-                          {w.nameAr}
+                          {w.nameAr} ({w.code})
                         </option>
                       ))}
                     </select>
@@ -515,7 +557,7 @@ export const InventoryTransfersView: React.FC = () => {
 
                 <div className="p-3 bg-sky-50/50 rounded-xl border border-sky-200 space-y-2">
                   <span className="font-bold text-sky-900 block text-xs">
-                    {isAr ? 'الوجهة (To):' : 'Destination:'}
+                    {isAr ? 'الوجهة (To):' : 'Destination Location:'}
                   </span>
                   <div>
                     <label className="block text-slate-600 text-[11px] mb-1">
@@ -524,27 +566,11 @@ export const InventoryTransfersView: React.FC = () => {
                     <select
                       value={toWhId}
                       onChange={e => setToWhId(e.target.value)}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                      className="w-full p-2 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-sky-500"
                     >
                       {warehouses.map(w => (
                         <option key={w.id} value={w.id}>
-                          {w.nameAr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 text-[11px] mb-1">
-                      {isAr ? 'موقع الإنتاج / المرحلة' : 'Production Location'}
-                    </label>
-                    <select
-                      value={toLocId}
-                      onChange={e => setToLocId(e.target.value)}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                    >
-                      {locations.map(l => (
-                        <option key={l.id} value={l.id}>
-                          {l.nameAr} ({l.code})
+                          {w.nameAr} ({w.code})
                         </option>
                       ))}
                     </select>
@@ -552,7 +578,62 @@ export const InventoryTransfersView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Quantity & UOM */}
+              {/* Same Location Validation Warning */}
+              {isSameLocation && (
+                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-rose-800 text-xs font-semibold">
+                  {isAr
+                    ? 'خطأ: يجب أن يكون مستودع المصدر مختلفاً عن مستودع الوجهة لإتمام التحويل.'
+                    : 'Error: Source and destination locations must be different for inventory transfer.'}
+                </div>
+              )}
+
+              {/* Source Location Valuation Card */}
+              <div className="space-y-1">
+                <span className="font-bold text-slate-700 text-xs">
+                  {isAr ? '1. حالة تقييم المستودع المصدر (Transfer Out - يخصم بمتوسط التكلفة):' : '1. Source Warehouse Valuation (Transfer Out):'}
+                </span>
+                <LocationValuationCard
+                  language={language}
+                  locationName={warehouses.find(w => w.id === fromWhId)?.nameAr || fromWhId}
+                  itemUOM={itemBaseUOM}
+                  currentOnHand={sourceOnHand}
+                  currentValue={sourceValue}
+                  currentMAC={sourceMAC}
+                  transactionQuantity={baseQuantity}
+                  direction="TRANSFER"
+                  unitCost={sourceMAC}
+                  isCostLocked={true}
+                  lockReason={isAr ? 'متوسط تكلفة المصدر مقفل (Source MAC Locked)' : 'Source MAC Locked'}
+                  projectedNewOnHand={sourceProjectedOnHand}
+                  projectedNewValue={sourceProjectedValue}
+                  projectedNewMAC={sourceProjectedMAC}
+                />
+              </div>
+
+              {/* Destination Location Valuation Card */}
+              <div className="space-y-1">
+                <span className="font-bold text-slate-700 text-xs">
+                  {isAr ? '2. حالة تقييم مستودع الوجهة (Transfer In - يستلم القيمة ويعيد احتساب MAC):' : '2. Destination Warehouse Valuation (Transfer In):'}
+                </span>
+                <LocationValuationCard
+                  language={language}
+                  locationName={warehouses.find(w => w.id === toWhId)?.nameAr || toWhId}
+                  itemUOM={itemBaseUOM}
+                  currentOnHand={destOnHand}
+                  currentValue={destValue}
+                  currentMAC={destMAC}
+                  transactionQuantity={baseQuantity}
+                  direction="INCOMING"
+                  unitCost={sourceMAC}
+                  isCostLocked={true}
+                  lockReason={isAr ? 'يستلم بتكلفة المصدر (Received at Transferred Cost)' : 'Received at Source Cost'}
+                  projectedNewOnHand={destProjectedOnHand}
+                  projectedNewValue={destProjectedValue}
+                  projectedNewMAC={destProjectedMAC}
+                />
+              </div>
+
+              {/* Quantity, UOM, and Locked Transfer Unit Cost */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
@@ -562,7 +643,7 @@ export const InventoryTransfersView: React.FC = () => {
                   <select
                     value={activeTransactionUOM}
                     onChange={e => setSelectedUOM(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
                   >
                     {availableUOMs.map(u => (
                       <option key={u.id} value={u.code}>
@@ -582,20 +663,29 @@ export const InventoryTransfersView: React.FC = () => {
                     step="any"
                     value={quantity}
                     onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-sky-700 focus:ring-2 focus:ring-sky-500"
+                    className={`w-full p-2.5 rounded-lg border font-mono font-bold text-base focus:ring-2 ${
+                      isInsufficient
+                        ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-500'
+                        : 'border-slate-200 text-sky-700 focus:ring-sky-500'
+                    }`}
                     required
                   />
                 </div>
 
+                {/* Locked System Transfer Cost */}
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'المرجع / أمر التشغيل' : 'Reference'}
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? 'تكلفة التحويل المنقولة *' : 'Transfer Cost *'}</span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                      {isAr ? 'تكلفة المصدر' : 'Source MAC'}
+                    </span>
                   </label>
                   <input
                     type="text"
-                    value={reference}
-                    onChange={e => setReference(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200"
+                    value={formatCurrency(unitCostEGP, language)}
+                    disabled
+                    readOnly
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-slate-100 font-mono font-bold text-slate-700 cursor-not-allowed select-none"
                   />
                 </div>
               </div>
@@ -613,9 +703,34 @@ export const InventoryTransfersView: React.FC = () => {
                 </div>
               )}
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'المرجع / أمر التشغيل' : 'Reference'}
+                  </label>
+                  <input
+                    type="text"
+                    value={reference}
+                    onChange={e => setReference(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'ملاحظات' : 'Notes'}
+                  </label>
+                  <input
+                    type="text"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200"
+                  />
+                </div>
+              </div>
+
               {/* Cost Preview */}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs font-mono">
-                <span className="text-slate-600 font-sans">
+                <span className="text-slate-600 font-sans font-semibold">
                   {isAr ? 'قيمة التحويل المنقولة (بدون تغيير القيمة الكلية للشركة):' : 'Transferred Value (Company Total Unchanged):'}
                 </span>
                 <span className="font-bold text-slate-900 text-sm">
@@ -627,15 +742,26 @@ export const InventoryTransfersView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700"
+                  className="px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold"
+                  disabled={isInsufficient || isSameLocation || quantity <= 0}
+                  className={`px-5 py-2.5 rounded-lg font-bold text-white transition flex items-center gap-2 ${
+                    isInsufficient || isSameLocation || quantity <= 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-sky-600 hover:bg-sky-700 shadow-md shadow-sky-600/20'
+                  }`}
                 >
-                  {isAr ? 'ترحيل التحويل المخزني' : 'Post Transfer'}
+                  {isSameLocation ? (
+                    <span>{isAr ? 'المصدر والوجهة متطابقان' : 'Same Location Error'}</span>
+                  ) : isInsufficient ? (
+                    <span>{isAr ? 'عجز في رصيد المصدر' : 'Insufficient Source Stock'}</span>
+                  ) : (
+                    <span>{isAr ? 'ترحيل التحويل المخزني (In & Out)' : 'Post Transfer'}</span>
+                  )}
                 </button>
               </div>
             </form>

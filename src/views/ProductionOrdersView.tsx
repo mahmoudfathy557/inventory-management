@@ -22,12 +22,14 @@ import {
   BarChart3,
   HelpCircle,
   ArrowRightLeft,
-  Scale
+  Scale,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
+import { LocationValuationCard } from '../components/common/LocationValuationCard';
 import { ProductionOrderModificationModal } from '../components/production/ProductionOrderModificationModal';
 import { ProductionOrderDetailModal } from '../components/production/ProductionOrderDetailModal';
 import { ProductionCostImpactReport } from '../components/reports/ProductionCostImpactReport';
@@ -64,7 +66,8 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
     boms,
     warehouses,
     uoms,
-    currentUser
+    currentUser,
+    getItemWarehouseValuation
   } = useApp();
   const isAr = language === 'ar';
 
@@ -142,10 +145,12 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
   // Issue modal state
   const [issueQty, setIssueQty] = useState(1000);
   const [issueUOM, setIssueUOM] = useState('');
+  const [issueWarehouseId, setIssueWarehouseId] = useState('wh-raw');
 
   // Produce modal state
   const [finishedQty, setFinishedQty] = useState(900);
   const [produceUOM, setProduceUOM] = useState('');
+  const [produceWarehouseId, setProduceWarehouseId] = useState('wh-fg');
   const [scrapQty, setScrapQty] = useState(100);
   const [laborCost, setLaborCost] = useState(0);
   const [overheadCost, setOverheadCost] = useState(0);
@@ -210,6 +215,18 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
   const issueFactor = getConversionFactorToBase(activeIssueUOM, rawMatBaseUOM, uoms);
   const baseIssueQty = issueQty * issueFactor;
 
+  // Authoritative SAP B1 Location Valuation for Issue Material to Production
+  const activeIssueWh = warehouses.find(w => w.id === issueWarehouseId);
+  const activeRawMatStock = getItemWarehouseValuation(activeRawMat.id, issueWarehouseId);
+  const rawMatOnHand = activeRawMatStock.currentQty || 0;
+  const rawMatValue = activeRawMatStock.totalValue || 0;
+  const rawMatMAC = activeRawMatStock.movingAverageCost || 0;
+  const issueTotalCost = baseIssueQty * rawMatMAC;
+  const isIssueExceeding = baseIssueQty > rawMatOnHand;
+  const rawMatProjOnHand = Math.max(0, rawMatOnHand - baseIssueQty);
+  const rawMatProjValue = Math.max(0, rawMatValue - issueTotalCost);
+  const rawMatProjMAC = rawMatMAC; // Outgoing issue retains current MAC
+
   // Active product output for produce modal
   const prodBaseUOM = selectedOrder?.uom || 'KG';
   const availableProduceUOMs = getAvailableUOMsForItem(prodBaseUOM, uoms);
@@ -218,9 +235,27 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
   const baseFinishedQty = finishedQty * produceFactor;
   const baseScrapQty = scrapQty * produceFactor;
 
+  // Authoritative SAP B1 Cost Pool & Receipt Valuation
+  // Cost Pool = sum of actual material issues linked to order + direct labor + overhead
+  const orderMaterialCostPool = selectedOrder?.actualMaterialCostEGP || 0;
+  const totalProductionCost = orderMaterialCostPool + laborCost + overheadCost;
+  // Unit cost allocated exclusively to good finished product (Scrap receives zero)
+  const finishedUnitCost = baseFinishedQty > 0 ? totalProductionCost / baseFinishedQty : 0;
+
+  // Destination Finished Goods Warehouse Valuation
+  const activeProduceWh = warehouses.find(w => w.id === produceWarehouseId);
+  const fgWhStock = selectedOrder ? getItemWarehouseValuation(selectedOrder.productId, produceWarehouseId) : { currentQty: 0, totalValue: 0, movingAverageCost: 0 };
+  const fgOnHand = fgWhStock.currentQty || 0;
+  const fgValue = fgWhStock.totalValue || 0;
+  const fgMAC = fgWhStock.movingAverageCost || 0;
+  const fgProjOnHand = fgOnHand + baseFinishedQty;
+  const fgProjValue = fgValue + totalProductionCost;
+  const fgProjMAC = fgProjOnHand > 0 ? fgProjValue / fgProjOnHand : 0;
+
   const handleIssueSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOrder) return;
+    if (!selectedOrder || issueQty <= 0) return;
+    if (isIssueExceeding) return;
 
     issueMaterialToProduction({
       productionOrderId: selectedOrder.id,
@@ -235,9 +270,9 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       conversionFactor: issueFactor,
       baseQuantity: baseIssueQty,
       baseUOM: rawMatBaseUOM,
-      movingAverageCostEGP: activeRawMat.movingAverageCost || 110,
-      totalActualCostEGP: baseIssueQty * (activeRawMat.movingAverageCost || 110),
-      warehouseId: selectedOrder.wipWarehouseId || 'wh-raw',
+      movingAverageCostEGP: rawMatMAC,
+      totalActualCostEGP: issueTotalCost,
+      warehouseId: issueWarehouseId,
       createdBy: currentUser?.fullName || 'Production Engineer'
     });
 
@@ -247,10 +282,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
   const handleProduceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOrder) return;
-
-    const totalCost = (selectedOrder.actualMaterialCostEGP || 110000) + laborCost + overheadCost;
-    const unitCost = baseFinishedQty > 0 ? totalCost / baseFinishedQty : 0;
+    if (!selectedOrder || finishedQty <= 0) return;
 
     recordProductionReceipt({
       productionOrderId: selectedOrder.id,
@@ -265,10 +297,10 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       conversionFactor: produceFactor,
       baseQuantity: baseFinishedQty,
       baseUOM: prodBaseUOM,
-      finishedGoodsWarehouseId: selectedOrder.finishedGoodsWarehouseId || 'wh-fg',
+      finishedGoodsWarehouseId: produceWarehouseId,
       scrapWarehouseId: 'wh-scrap',
-      totalMaterialCostEGP: totalCost,
-      finishedGoodsUnitCostEGP: unitCost,
+      totalMaterialCostEGP: totalProductionCost,
+      finishedGoodsUnitCostEGP: finishedUnitCost,
       qualityStatus: QualityStatus.PENDING,
       createdBy: currentUser?.fullName || 'Production Engineer',
       notes: 'استلام مخرجات تشغيل بانتظار فحص الجودة'
@@ -866,13 +898,20 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       {/* Modal: Issue Materials to Production */}
       {isIssueModalOpen && selectedOrder && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-sm">
-                  {isAr ? `صرف خامات لأمر الإنتاج (${selectedOrder.orderNumber})` : 'Issue Materials'}
-                </h3>
+                <div className="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
+                  Type 4 — SAP B1
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">
+                    {isAr ? `صرف خامات لأمر الإنتاج (${selectedOrder.orderNumber})` : 'Issue Materials to Production'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {isAr ? 'يتم الصرف بمتوسط تكلفة موقع الخامات الفعلي مع منع التعديل اليدوي' : 'System MAC at source warehouse locked & recorded against order pool'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsIssueModalOpen(false)}
@@ -883,20 +922,58 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
             </div>
 
             <form onSubmit={handleIssueSubmit} className="p-6 space-y-4 text-xs">
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 space-y-1">
-                <div className="font-bold flex items-center justify-between">
-                  <span>{isAr ? 'المادة الخام المستهدفة:' : 'Target Raw Material:'}</span>
-                  <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-amber-200 font-bold">
-                    {activeRawMat.code}
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'المادة الخام المستهدفة *' : 'Target Raw Material *'}
+                  </label>
+                  <input
+                    type="text"
+                    value={`${activeRawMat.nameAr} (${activeRawMat.code})`}
+                    disabled
+                    readOnly
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-slate-100 font-bold text-slate-700 cursor-not-allowed select-none"
+                  />
                 </div>
-                <div>{activeRawMat.nameAr} - متوسط التكلفة: {formatCurrency(activeRawMat.movingAverageCost || 110, language)} / {rawMatBaseUOM}</div>
-                <div className="text-[11px] text-amber-700 font-mono">
-                  {isAr ? 'القيمة المقدرة للصرف:' : 'Total Value:'} {formatCurrency(baseIssueQty * (activeRawMat.movingAverageCost || 110), language)}
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'المستودع المصدر (موقع الخام) *' : 'Source Warehouse (Location) *'}
+                  </label>
+                  <select
+                    value={issueWarehouseId}
+                    onChange={e => setIssueWarehouseId(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-amber-500"
+                    required
+                  >
+                    {warehouses.map(w => (
+                      <option key={w.id} value={w.id}>
+                        {w.nameAr} ({w.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Source Location Valuation Card */}
+              <LocationValuationCard
+                language={language}
+                locationName={activeIssueWh?.nameAr || issueWarehouseId}
+                itemUOM={rawMatBaseUOM}
+                currentOnHand={rawMatOnHand}
+                currentValue={rawMatValue}
+                currentMAC={rawMatMAC}
+                transactionQuantity={baseIssueQty}
+                direction="OUTGOING"
+                unitCost={rawMatMAC}
+                isCostLocked={true}
+                lockReason={isAr ? 'متوسط تكلفة المستودع مقفل آلياً لصرف التشغيل (SAP B1 Type 4)' : 'Locked to source location MAC'}
+                projectedNewOnHand={rawMatProjOnHand}
+                projectedNewValue={rawMatProjValue}
+                projectedNewMAC={rawMatProjMAC}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     {isAr ? 'وحدة القياس لصرف الخام *' : 'Issue UOM *'}
@@ -916,7 +993,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? `الكمية الفعلية المصروفة (${activeIssueUOM}) *` : `Actual Issued Qty (${activeIssueUOM}) *`}
+                    {isAr ? `الكمية المصروفة (${activeIssueUOM}) *` : `Issued Qty (${activeIssueUOM}) *`}
                   </label>
                   <input
                     type="number"
@@ -924,9 +1001,40 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                     step="any"
                     value={issueQty}
                     onChange={e => setIssueQty(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2.5 rounded-lg border border-slate-200 font-mono font-bold text-base text-amber-700 focus:ring-2 focus:ring-amber-500"
+                    className={`w-full p-2.5 rounded-lg border font-mono font-bold text-base focus:ring-2 ${
+                      isIssueExceeding
+                        ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-500'
+                        : 'border-slate-200 text-amber-700 focus:ring-amber-500'
+                    }`}
                     required
                   />
+                  <div className="flex items-center justify-between text-[11px] mt-1">
+                    <span className="text-slate-500">{isAr ? 'رصيد المستودع:' : 'Wh Stock:'}</span>
+                    <span className={`font-mono font-bold ${isIssueExceeding ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {formatNumber(rawMatOnHand, language)} {rawMatBaseUOM}
+                    </span>
+                  </div>
+                </div>
+
+                {/* System Locked Issue Cost */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? 'تكلفة الوحدة المنصرفة *' : 'Unit Cost (MAC) *'}</span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5" />
+                      {isAr ? 'مقفل' : 'Locked'}
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formatCurrency(rawMatMAC, language)}
+                    disabled
+                    readOnly
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-slate-100 font-mono font-bold text-slate-700 cursor-not-allowed select-none"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    {isAr ? 'محسوب آلياً من متوسط تكلفة المصدر' : 'System MAC from location'}
+                  </div>
                 </div>
               </div>
 
@@ -942,19 +1050,38 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 </div>
               )}
 
+              {/* Total Cost Added to Order Cost Pool */}
+              <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 flex justify-between items-center text-xs font-mono text-amber-950">
+                <span className="font-sans font-semibold">
+                  {isAr ? 'إجمالي تكلفة الخامات المضافة لمجمع تكلفة الأمر:' : 'Total Value Added to Production Cost Pool:'}
+                </span>
+                <span className="font-bold text-sm">
+                  {formatCurrency(issueTotalCost, language)}
+                </span>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsIssueModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold"
+                  disabled={isIssueExceeding || issueQty <= 0}
+                  className={`px-5 py-2 rounded-lg font-bold text-white transition flex items-center gap-2 ${
+                    isIssueExceeding || issueQty <= 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20'
+                  }`}
                 >
-                  {isAr ? 'تأكيد ترحيل صرف الخامات' : 'Post Material Issue'}
+                  {isIssueExceeding ? (
+                    <span>{isAr ? 'عجز في رصيد المستودع' : 'Insufficient Stock'}</span>
+                  ) : (
+                    <span>{isAr ? 'تأكيد ترحيل صرف الخامات' : 'Post Material Issue'}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -965,13 +1092,20 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
       {/* Modal: Production Receipt */}
       {isProduceModalOpen && selectedOrder && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Factory className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm">
-                  {isAr ? `استلام مخرجات الإنتاج (${selectedOrder.orderNumber})` : 'Receive Production Output'}
-                </h3>
+                <div className="p-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
+                  Type 3 — SAP B1
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">
+                    {isAr ? `استلام مخرجات الإنتاج (${selectedOrder.orderNumber})` : 'Receive Production Output'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {isAr ? 'احتساب التكلفة آلياً من مجمع تكاليف الصرف الفعلي مع تخصيص قيمة 0 للهالك' : 'Receipt cost calculated from actual issues pool; scrap receives zero value'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsProduceModalOpen(false)}
@@ -982,6 +1116,59 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
             </div>
 
             <form onSubmit={handleProduceSubmit} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'المنتج التام المستلم *' : 'Finished Product *'}
+                  </label>
+                  <input
+                    type="text"
+                    value={`${selectedOrder.productName} (${selectedOrder.productCode})`}
+                    disabled
+                    readOnly
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-slate-100 font-bold text-slate-700 cursor-not-allowed select-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'مستودع استلام المنتج التام *' : 'Finished Goods Warehouse *'}
+                  </label>
+                  <select
+                    value={produceWarehouseId}
+                    onChange={e => setProduceWarehouseId(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    {warehouses
+                      .filter(w => w.type === 'FINISHED_GOODS')
+                      .map(w => (
+                        <option key={w.id} value={w.id}>
+                          {w.nameAr} ({w.code})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Destination FG Warehouse Valuation Card */}
+              <LocationValuationCard
+                language={language}
+                locationName={activeProduceWh?.nameAr || produceWarehouseId}
+                itemUOM={prodBaseUOM}
+                currentOnHand={fgOnHand}
+                currentValue={fgValue}
+                currentMAC={fgMAC}
+                transactionQuantity={baseFinishedQty}
+                direction="INCOMING"
+                unitCost={finishedUnitCost}
+                isCostLocked={true}
+                lockReason={isAr ? 'تكلفة الإنتاج مجمعة آلياً من الخامات المنصرفة (SAP B1 Rule)' : 'Production cost derived from actual issues'}
+                projectedNewOnHand={fgProjOnHand}
+                projectedNewValue={fgProjValue}
+                projectedNewMAC={fgProjMAC}
+              />
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -990,7 +1177,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                   <select
                     value={activeProduceUOM}
                     onChange={e => setProduceUOM(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
                   >
                     {availableProduceUOMs.map(u => (
                       <option key={u.id} value={u.code}>
@@ -1002,7 +1189,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? `الكمية التامة (${activeProduceUOM}) *` : `Finished Qty (${activeProduceUOM}) *`}
+                    {isAr ? `الكمية التامة السليمة (${activeProduceUOM}) *` : `Good Finished Qty (${activeProduceUOM}) *`}
                   </label>
                   <input
                     type="number"
@@ -1010,14 +1197,17 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                     step="any"
                     value={finishedQty}
                     onChange={e => setFinishedQty(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 font-mono font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? `كمية الهالك (${activeProduceUOM}) *` : `Scrap Qty (${activeProduceUOM}) *`}
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? `كمية الهالك (${activeProduceUOM})` : `Scrap Qty (${activeProduceUOM})`}</span>
+                    <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-1 py-0.5 rounded border border-purple-200">
+                      0.00 ج.م
+                    </span>
                   </label>
                   <input
                     type="number"
@@ -1025,7 +1215,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                     step="any"
                     value={scrapQty}
                     onChange={e => setScrapQty(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-purple-700"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 font-mono font-bold text-purple-700"
                     required
                   />
                 </div>
@@ -1043,30 +1233,67 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 </div>
               )}
 
-              {/* Costing Engine Preview (Section 22 Rule) */}
-              {(() => {
-                const totalCost = (selectedOrder.actualMaterialCostEGP || 110000) + laborCost + overheadCost;
-                const unitCost = finishedQty > 0 ? totalCost / finishedQty : 0;
-                return (
-                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 font-mono space-y-1.5">
-                    <div className="text-[11px] font-bold text-emerald-900 font-sans">
-                      {isAr ? '📐 حسابات التكلفة وقاعدة الهالك المعيارية (Section 22):' : '📐 Cost Engine Allocation Rule:'}
-                    </div>
-                    <div className="flex justify-between border-b border-emerald-200/60 pb-1 text-xs">
-                      <span className="font-sans text-slate-600">{isAr ? 'إجمالي تكلفة أمر الإنتاج:' : 'Total Cost:'}</span>
-                      <span className="font-bold">{formatCurrency(totalCost, language)}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-emerald-200/60 pb-1 text-xs">
-                      <span className="font-sans text-slate-600">{isAr ? 'تكلفة وحدة المنتج التام المحسوبة:' : 'Finished Unit Cost:'}</span>
-                      <span className="font-bold text-blue-700 text-sm">{formatCurrency(unitCost, language)} / كجم</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="font-sans text-slate-600">{isAr ? 'قيمة الهالك المسجلة بالمخزن:' : 'Scrap Value:'}</span>
-                      <span className="font-bold text-purple-700">0.00 ج.م (قاعدة معيار MVP)</span>
-                    </div>
+              {/* Direct Labor & Overhead */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'أجور عمالة تشغيل مباشرة (اختياري - ج.م)' : 'Direct Labor Cost (EGP)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={laborCost}
+                    onChange={e => setLaborCost(parseFloat(e.target.value) || 0)}
+                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'مصاريف صناعية غير مباشرة (اختياري - ج.م)' : 'Direct Overhead Cost (EGP)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={overheadCost}
+                    onChange={e => setOverheadCost(parseFloat(e.target.value) || 0)}
+                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* SAP B1 Costing Engine Pool & Unit Allocation (Section 22 Rule) */}
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 font-mono space-y-2">
+                <div className="text-[11px] font-bold text-emerald-900 font-sans flex items-center justify-between">
+                  <span>{isAr ? '📐 مجمع تكاليف الإنتاج الفعلي (SAP B1 Cost Pool):' : '📐 SAP B1 Production Cost Pool:'}</span>
+                  <span className="text-[10px] bg-white text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-mono">
+                    {isAr ? 'محسوب آلياً ومقفل' : 'Auto-Calculated & Locked'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs border-b border-emerald-200/60 pb-2">
+                  <div>
+                    <span className="font-sans text-slate-600 block">{isAr ? 'مجمع الخامات المصروفة فعلياً:' : 'Posted Issues Pool:'}</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(orderMaterialCostPool, language)}</span>
                   </div>
-                );
-              })()}
+                  <div>
+                    <span className="font-sans text-slate-600 block">{isAr ? 'إجمالي تكلفة أمر التشغيل:' : 'Total Cost Pool:'}</span>
+                    <span className="font-bold text-emerald-800">{formatCurrency(totalProductionCost, language)}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-xs pt-0.5">
+                  <span className="font-sans text-slate-700 font-bold">
+                    {isAr ? 'تكلفة الوحدة للمنتج التام السليم:' : 'Finished Unit Cost Allocated:'}
+                  </span>
+                  <span className="font-bold text-blue-800 text-sm bg-white px-2 py-1 rounded border border-blue-200">
+                    {formatCurrency(finishedUnitCost, language)} / {prodBaseUOM}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-purple-900 pt-0.5 border-t border-emerald-200/40">
+                  <span className="font-sans text-slate-600">{isAr ? 'تقييم كمية الهالك (Scrap Valuation):' : 'Scrap Valuation:'}</span>
+                  <span className="font-bold font-sans">0.00 ج.م (قاعدة إلزامية: لا تحمّل تكلفة للهالك)</span>
+                </div>
+              </div>
 
               <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 flex-shrink-0" />
@@ -1081,15 +1308,16 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 <button
                   type="button"
                   onClick={() => setIsProduceModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                  disabled={finishedQty <= 0}
+                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20"
                 >
-                  {isAr ? 'تأكيد الاستلام وإرسال للجودة' : 'Receive & Send to QA'}
+                  {isAr ? 'ترحيل استلام الإنتاج' : 'Post Production Receipt'}
                 </button>
               </div>
             </form>

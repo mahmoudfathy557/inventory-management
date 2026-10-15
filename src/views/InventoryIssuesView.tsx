@@ -7,13 +7,15 @@ import {
   X,
   AlertOctagon,
   ArrowRightLeft,
-  Scale
+  Scale,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
+import { LocationValuationCard } from '../components/common/LocationValuationCard';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryIssue } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -31,7 +33,8 @@ export const InventoryIssuesView: React.FC = () => {
     rawMaterials,
     products,
     uoms,
-    currentUser
+    currentUser,
+    getItemWarehouseValuation
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
@@ -110,12 +113,26 @@ export const InventoryIssuesView: React.FC = () => {
   const activeTransactionUOM = selectedUOM || itemBaseUOM;
   const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
   const baseQuantity = quantity * conversionFactor;
-  const movingAverageCostEGP = selectedItem?.movingAverageCost || 110;
+
+  // SAP Business One: Valuation MUST be retrieved strictly from the selected Warehouse/Location layer
+  const currentLocationStock = getItemWarehouseValuation(selectedItemId, selectedWarehouseId);
+  const locationOnHand = currentLocationStock.currentQty || 0;
+  const locationValue = currentLocationStock.totalValue || 0;
+  const locationMAC = currentLocationStock.movingAverageCost || 0;
+
+  // Authoritative Unit Cost is strictly locked to current Location MAC immediately before posting
+  const movingAverageCostEGP = locationMAC;
   const totalIssueValueEGP = baseQuantity * movingAverageCostEGP;
+  const isInsufficient = baseQuantity > locationOnHand;
+
+  const projectedNewOnHand = Math.max(0, locationOnHand - baseQuantity);
+  const projectedNewValue = projectedNewOnHand === 0 ? 0 : Math.max(0, locationValue - totalIssueValueEGP);
+  const projectedNewMAC = locationMAC; // Outgoing movement never changes MAC!
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || quantity <= 0) return;
+    if (isInsufficient) return;
 
     addIssue({
       date: new Date().toISOString().split('T')[0],
@@ -321,10 +338,17 @@ export const InventoryIssuesView: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-sm">
-                  {isAr ? 'إصدار إذن صرف مخزني عام' : 'Create Inventory Issue'}
-                </h3>
+                <div className="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
+                  Type 2 — SAP B1
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">
+                    {isAr ? 'إصدار إذن صرف مخزني عام (Issued)' : 'Issue General Inventory'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {isAr ? 'التكلفة مقفلة آلياً وتُسترجع من متوسط تكلفة الموقع لحظة الصرف' : 'Cost locked to Location MAC immediately before posting'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsCreateOpen(false)}
@@ -335,47 +359,74 @@ export const InventoryIssuesView: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs">
+              {/* Item Selection */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  {isAr ? 'الصنف المراد صرفه *' : 'Item *'}
+                  {isAr ? 'الصنف المراد صرفه *' : 'Item to Issue *'}
                 </label>
                 <select
                   value={selectedItemId}
                   onChange={e => setSelectedItemId(e.target.value)}
-                  className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-amber-500"
                   required
                 >
-                  {rawMaterials.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.nameAr} - رصيد: {m.currentQty} {m.defaultUOM} (متوسط: {formatCurrency(m.movingAverageCost, language)})
-                    </option>
-                  ))}
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.nameAr} - رصيد: {p.currentQty} {p.defaultUOM}
+                  {rawMaterials.map(m => {
+                    const st = getItemWarehouseValuation(m.id, selectedWarehouseId);
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {m.nameAr} - رصيد الموقع: {formatNumber(st.currentQty, language)} {m.defaultUOM} (متوسط: {formatCurrency(st.movingAverageCost, language)})
+                      </option>
+                    );
+                  })}
+                  {products.map(p => {
+                    const st = getItemWarehouseValuation(p.id, selectedWarehouseId);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.nameAr} - رصيد الموقع: {formatNumber(st.currentQty, language)} {p.defaultUOM} (متوسط: {formatCurrency(st.movingAverageCost, language)})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Source Warehouse Selection */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {isAr ? 'مستودع / موقع الصرف (Source Location) *' : 'From Warehouse / Location *'}
+                </label>
+                <select
+                  value={selectedWarehouseId}
+                  onChange={e => setSelectedWarehouseId(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-900 focus:ring-2 focus:ring-amber-500"
+                >
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.nameAr} ({w.code})
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'الصرف من مستودع *' : 'From Warehouse *'}
-                  </label>
-                  <select
-                    value={selectedWarehouseId}
-                    onChange={e => setSelectedWarehouseId(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                  >
-                    {warehouses.map(w => (
-                      <option key={w.id} value={w.id}>
-                        {w.nameAr}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* SAP B1 Location Valuation Card */}
+              <LocationValuationCard
+                language={language}
+                locationName={warehouses.find(w => w.id === selectedWarehouseId)?.nameAr || selectedWarehouseId}
+                itemUOM={itemBaseUOM}
+                currentOnHand={locationOnHand}
+                currentValue={locationValue}
+                currentMAC={locationMAC}
+                transactionQuantity={baseQuantity}
+                direction="OUTGOING"
+                unitCost={movingAverageCostEGP}
+                isCostLocked={true}
+                lockReason={isAr ? 'متوسط تكلفة الموقع مقفل (SAP MAC Locked)' : 'Location MAC Locked'}
+                projectedNewOnHand={projectedNewOnHand}
+                projectedNewValue={projectedNewValue}
+                projectedNewMAC={projectedNewMAC}
+              />
 
+              {/* Quantity, UOM, and Locked Unit Cost */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
                     <span>{isAr ? 'وحدة القياس للحركة *' : 'Transaction UOM *'}</span>
@@ -384,7 +435,7 @@ export const InventoryIssuesView: React.FC = () => {
                   <select
                     value={activeTransactionUOM}
                     onChange={e => setSelectedUOM(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-amber-500"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-amber-500"
                   >
                     {availableUOMs.map(u => (
                       <option key={u.id} value={u.code}>
@@ -404,8 +455,30 @@ export const InventoryIssuesView: React.FC = () => {
                     step="any"
                     value={quantity}
                     onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-rose-700 focus:ring-2 focus:ring-rose-500"
+                    className={`w-full p-2.5 rounded-lg border font-mono font-bold text-base focus:ring-2 ${
+                      isInsufficient
+                        ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-500'
+                        : 'border-slate-200 text-rose-700 focus:ring-rose-500'
+                    }`}
                     required
+                  />
+                </div>
+
+                {/* System-Controlled Read-Only Unit Cost Field */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? 'تكلفة الوحدة المحسوبة *' : 'Unit Cost *'}</span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5 text-amber-700" />
+                      <span>{isAr ? 'مقفل' : 'Locked'}</span>
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formatCurrency(movingAverageCostEGP, language)}
+                    disabled
+                    readOnly
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-slate-100 font-mono font-bold text-slate-700 cursor-not-allowed select-none"
                   />
                 </div>
               </div>
@@ -430,7 +503,7 @@ export const InventoryIssuesView: React.FC = () => {
                 <select
                   value={reason}
                   onChange={e => setReason(e.target.value)}
-                  className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800"
                 >
                   <option value="عينات فحص مخبري ومراقبة جودة (Lab Testing & Samples)">عينات فحص مخبري ومراقبة جودة</option>
                   <option value="تجارب بحث وتطوير وصياغة جديدة (R&D Trials)">تجارب بحث وتطوير وصياغة جديدة</option>
@@ -449,7 +522,7 @@ export const InventoryIssuesView: React.FC = () => {
                     type="text"
                     value={reference}
                     onChange={e => setReference(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200"
+                    className="w-full p-2.5 rounded-lg border border-slate-200"
                   />
                 </div>
                 <div>
@@ -460,14 +533,14 @@ export const InventoryIssuesView: React.FC = () => {
                     type="text"
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200"
+                    className="w-full p-2.5 rounded-lg border border-slate-200"
                   />
                 </div>
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex justify-between items-center text-xs font-mono">
-                <span className="text-amber-900 font-sans">
-                  {isAr ? 'قيمة الصرف المحتسبة (بمتوسط التكلفة):' : 'Calculated Value @ MAC:'}
+                <span className="text-amber-900 font-sans font-semibold">
+                  {isAr ? 'إجمالي قيمة الصرف المحتسبة (الكمية × متوسط تكلفة الموقع):' : 'Calculated Total Value (Qty × Location MAC):'}
                 </span>
                 <span className="font-bold text-amber-950 text-sm">
                   {formatCurrency(totalIssueValueEGP, language)}
@@ -478,15 +551,24 @@ export const InventoryIssuesView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700"
+                  className="px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                  disabled={isInsufficient || quantity <= 0}
+                  className={`px-5 py-2.5 rounded-lg font-bold text-white transition flex items-center gap-2 ${
+                    isInsufficient || quantity <= 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/20'
+                  }`}
                 >
-                  {isAr ? 'ترحيل إذن الصرف' : 'Post Issue'}
+                  {isInsufficient ? (
+                    <span>{isAr ? 'عجز في الرصيد - غير مسموح بالصرف' : 'Insufficient Location Stock'}</span>
+                  ) : (
+                    <span>{isAr ? 'ترحيل إذن الصرف' : 'Post Issue'}</span>
+                  )}
                 </button>
               </div>
             </form>

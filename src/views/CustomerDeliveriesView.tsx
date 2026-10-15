@@ -9,13 +9,15 @@ import {
   CheckCircle,
   ExternalLink,
   ArrowRightLeft,
-  Scale
+  Scale,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
 import { DataTable, Column } from '../components/common/DataTable';
 import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
+import { LocationValuationCard } from '../components/common/LocationValuationCard';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { CustomerDelivery } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -33,7 +35,8 @@ export const CustomerDeliveriesView: React.FC = () => {
     warehouses,
     customers,
     uoms,
-    currentUser
+    currentUser,
+    getItemWarehouseValuation
   } = useApp();
   const confirm = useConfirm();
   const isAr = language === 'ar';
@@ -116,13 +119,21 @@ export const CustomerDeliveriesView: React.FC = () => {
   const conversionFactor = getConversionFactorToBase(activeTransactionUOM, itemBaseUOM, uoms);
   const baseQuantity = quantity * conversionFactor;
 
-  // Moving Average Cost of FG (e.g. 122.222 EGP per base UOM)
-  const currentMAC = selectedProduct?.movingAverageCost || 122.222;
+  // Authoritative SAP B1 Location Moving Average Cost of FG
+  const targetWh = warehouses.find(w => w.id === selectedWarehouseId);
+  const whValuation = getItemWarehouseValuation(selectedProductId, selectedWarehouseId);
+  const currentOnHand = whValuation.currentQty || 0;
+  const currentVal = whValuation.totalValue || 0;
+  const currentMAC = whValuation.movingAverageCost || 0;
   const totalCostEGP = baseQuantity * currentMAC;
   const totalRevenueEGP = quantity * sellingPrice;
   const grossProfitEGP = totalRevenueEGP - totalCostEGP;
 
-  const isExceedingStock = baseQuantity > (selectedProduct?.currentQty || 0);
+  const isExceedingStock = baseQuantity > currentOnHand;
+
+  const projectedOnHand = Math.max(0, currentOnHand - baseQuantity);
+  const projectedVal = Math.max(0, currentVal - totalCostEGP);
+  const projectedMAC = currentMAC; // Outgoing doesn't change MAC under SAP B1 rules
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,7 +386,7 @@ export const CustomerDeliveriesView: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     {isAr ? 'العميل المستلم *' : 'Customer *'}
@@ -383,7 +394,7 @@ export const CustomerDeliveriesView: React.FC = () => {
                   <select
                     value={selectedCustomerId}
                     onChange={e => setSelectedCustomerId(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium"
                     required
                   >
                     {customers.map(c => (
@@ -401,20 +412,58 @@ export const CustomerDeliveriesView: React.FC = () => {
                   <select
                     value={selectedProductId}
                     onChange={e => setSelectedProductId(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium"
                     required
                   >
                     {products.map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.nameAr} - رصيد: {p.currentQty} {p.defaultUOM} (متوسط: {formatCurrency(p.movingAverageCost, language)})
+                        {p.nameAr}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'مستودع الصرف (الموقع) *' : 'Fulfillment Warehouse *'}
+                  </label>
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={e => setSelectedWarehouseId(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-medium"
+                    required
+                  >
+                    {warehouses
+                      .filter(w => w.type === 'FINISHED_GOODS')
+                      .map(w => (
+                        <option key={w.id} value={w.id}>
+                          {w.nameAr} ({w.code})
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Quantity, UOM & Selling Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Location Valuation Card for Fulfillment Warehouse */}
+              <LocationValuationCard
+                language={language}
+                locationName={targetWh?.nameAr || selectedWarehouseId}
+                itemUOM={itemBaseUOM}
+                currentOnHand={currentOnHand}
+                currentValue={currentVal}
+                currentMAC={currentMAC}
+                transactionQuantity={baseQuantity}
+                direction="OUTGOING"
+                unitCost={currentMAC}
+                isCostLocked={true}
+                lockReason={isAr ? 'تكلفة المبيعات (COGS) مقفلة آلياً عند متوسط تكلفة المستودع الحالي (SAP B1 Rule)' : 'COGS unit cost locked to current location MAC'}
+                projectedNewOnHand={projectedOnHand}
+                projectedNewValue={projectedVal}
+                projectedNewMAC={projectedMAC}
+              />
+
+              {/* Quantity, UOM, Selling Price & Locked COGS Cost */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
                     <span>{isAr ? 'وحدة القياس للتسليم *' : 'Delivery UOM *'}</span>
@@ -423,7 +472,7 @@ export const CustomerDeliveriesView: React.FC = () => {
                   <select
                     value={activeTransactionUOM}
                     onChange={e => setSelectedUOM(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-blue-500"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-slate-800 focus:ring-2 focus:ring-blue-500"
                   >
                     {availableUOMs.map(u => (
                       <option key={u.id} value={u.code}>
@@ -443,26 +492,42 @@ export const CustomerDeliveriesView: React.FC = () => {
                     step="any"
                     value={quantity}
                     onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
-                    className={`w-full p-2 rounded-lg border font-mono font-bold ${
+                    className={`w-full p-2.5 rounded-lg border font-mono font-bold ${
                       isExceedingStock
-                        ? 'border-rose-300 bg-rose-50/50 text-rose-700'
-                        : 'border-slate-200'
+                        ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-500'
+                        : 'border-slate-200 text-slate-900 focus:ring-blue-500'
                     }`}
                     required
                   />
                   <div className="flex items-center justify-between text-[11px] mt-1">
-                    <span className="text-slate-500">{isAr ? 'رصيد المخزون الأساسي:' : 'Stock:'}</span>
+                    <span className="text-slate-500">{isAr ? 'رصيد المستودع:' : 'Wh Stock:'}</span>
                     <span className={`font-mono font-bold ${
                       isExceedingStock ? 'text-rose-600' : 'text-emerald-600'
                     }`}>
-                      {formatNumber(selectedProduct?.currentQty || 0, language)} {itemBaseUOM}
+                      {formatNumber(currentOnHand, language)} {itemBaseUOM}
                     </span>
                   </div>
-                  {isExceedingStock && (
-                    <div className="text-[10px] text-rose-600 font-bold mt-0.5">
-                      {isAr ? `⚠️ تتجاوز الرصيد (${formatNumber(baseQuantity, language)} ${itemBaseUOM})` : '⚠️ Exceeds available stock'}
-                    </div>
-                  )}
+                </div>
+
+                {/* System Locked COGS Unit Cost */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{isAr ? 'تكلفة الوحدة (COGS) *' : 'COGS Unit Cost *'}</span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5" />
+                      {isAr ? 'مقفل (MAC)' : 'Locked'}
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formatCurrency(currentMAC, language)}
+                    disabled
+                    readOnly
+                    className="w-full p-2.5 rounded-lg border border-slate-200 bg-slate-100 font-mono font-bold text-slate-700 cursor-not-allowed select-none"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    {isAr ? 'محسوب آلياً من المستودع' : 'System MAC from location'}
+                  </div>
                 </div>
 
                 <div>
@@ -475,9 +540,12 @@ export const CustomerDeliveriesView: React.FC = () => {
                     step="any"
                     value={sellingPrice}
                     onChange={e => setSellingPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold"
+                    className="w-full p-2.5 rounded-lg border border-slate-200 font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
                     required
                   />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    {isAr ? 'سعر البيع للعميل' : 'Customer selling price'}
+                  </div>
                 </div>
               </div>
 
@@ -503,27 +571,21 @@ export const CustomerDeliveriesView: React.FC = () => {
                     type="text"
                     value={salesOrderRef}
                     onChange={e => setSalesOrderRef(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200"
+                    className="w-full p-2.5 rounded-lg border border-slate-200"
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'المستودع المصدر' : 'Warehouse'}
+                    {isAr ? 'ملاحظات إذن التسليم' : 'Notes'}
                   </label>
-                  <select
-                    value={selectedWarehouseId}
-                    onChange={e => setSelectedWarehouseId(e.target.value)}
-                    className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                  >
-                    {warehouses
-                      .filter(w => w.type === 'FINISHED_GOODS')
-                      .map(w => (
-                        <option key={w.id} value={w.id}>
-                          {w.nameAr}
-                        </option>
-                      ))}
-                  </select>
+                  <input
+                    type="text"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder={isAr ? 'صرف بضاعة تامة للعميل وفق أمر التوريد' : 'Customer delivery notes'}
+                    className="w-full p-2.5 rounded-lg border border-slate-200"
+                  />
                 </div>
               </div>
 

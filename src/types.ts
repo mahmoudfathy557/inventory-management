@@ -104,6 +104,8 @@ export enum QualityStatus {
 export enum TransactionType {
   OPENING_BALANCE = 'OPENING_BALANCE',
   PURCHASE_RECEIPT = 'PURCHASE_RECEIPT',
+  RECEIPT = 'RECEIPT',
+  GOODS_RECEIPT_PO = 'GOODS_RECEIPT_PO',
   LANDED_COST = 'LANDED_COST',
   INVENTORY_ISSUE = 'INVENTORY_ISSUE',
   TRANSFER_IN = 'TRANSFER_IN',
@@ -113,6 +115,10 @@ export enum TransactionType {
   FINISHED_GOODS_RECEIPT = 'FINISHED_GOODS_RECEIPT',
   CUSTOMER_DELIVERY = 'CUSTOMER_DELIVERY',
   SCRAP = 'SCRAP',
+  COUNT_POSTING = 'COUNT_POSTING',
+  REVALUATION = 'REVALUATION',
+  RETURN_TO_VENDOR = 'RETURN_TO_VENDOR',
+  RETURN_FROM_CUSTOMER = 'RETURN_FROM_CUSTOMER',
   COST_ADJUSTMENT = 'COST_ADJUSTMENT',
   REVERSAL = 'REVERSAL'
 }
@@ -768,4 +774,98 @@ export interface SyncQueueStats {
   syncing: number;
   synced: number;
   failed: number;
+}
+
+// ==========================================
+// SAP BUSINESS ONE INVENTORY TRANSACTIONS
+// ==========================================
+
+export interface InventoryCountPosting {
+  id: string;
+  countNumber: string;
+  date: string;
+  warehouseId: string;
+  locationId?: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  bookQuantity: number;
+  countedQuantity: number;
+  varianceQuantity: number;
+  uom: string;
+  unitCostEGP: number; // User entered if positive variance; system MAC if negative
+  totalAdjustmentValueEGP: number;
+  reason: string;
+  notes?: string;
+  createdBy: string;
+  createdDate: string;
+  status: 'POSTED' | 'CANCELLED';
+}
+
+export interface InventoryRevaluation {
+  id: string;
+  revaluationNumber: string;
+  date: string;
+  warehouseId: string;
+  locationId?: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  currentQuantity: number;
+  currentValueEGP: number;
+  currentMACEGP: number;
+  adjustmentAmountEGP: number; // Signed amount
+  newInventoryValueEGP: number;
+  newMACEGP: number;
+  reason: string;
+  notes?: string;
+  createdBy: string;
+  createdDate: string;
+  status: 'POSTED' | 'CANCELLED';
+}
+
+export interface ReturnToVendor {
+  id: string;
+  returnNumber: string;
+  date: string;
+  originalReceiptId: string;
+  originalReceiptNumber: string;
+  supplierId: string;
+  supplierName: string;
+  warehouseId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  returnQuantity: number;
+  uom: string;
+  unitCostEGP: number; // Locked: derived from original receipt effective cost
+  totalReturnValueEGP: number;
+  reason: string;
+  notes?: string;
+  createdBy: string;
+  createdDate: string;
+  status: 'POSTED' | 'CANCELLED';
+}
+
+export interface ReturnFromCustomer {
+  id: string;
+  returnNumber: string;
+  date: string;
+  originalDeliveryId: string;
+  originalDeliveryNumber: string;
+  customerId: string;
+  customerName: string;
+  warehouseId: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  returnQuantity: number;
+  uom: string;
+  unitCostEGP: number; // Locked: historical issue cost from delivery
+  totalReturnValueEGP: number;
+  reason: string;
+  notes?: string;
+  createdBy: string;
+  createdDate: string;
+  status: 'POSTED' | 'CANCELLED';
 }
