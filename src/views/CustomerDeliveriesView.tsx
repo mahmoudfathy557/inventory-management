@@ -23,6 +23,7 @@ import { CustomerDelivery } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 
 export const CustomerDeliveriesView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -89,6 +90,7 @@ export const CustomerDeliveriesView: React.FC = () => {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [printDelivery, setPrintDelivery] = useState<CustomerDelivery | null>(null);
+  const [cancelModalDelivery, setCancelModalDelivery] = useState<CustomerDelivery | null>(null);
 
   // Form state
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers[0]?.id || '');
@@ -287,20 +289,18 @@ export const CustomerDeliveriesView: React.FC = () => {
           </button>
           {d.status === 'POSTED' && (
             <button
-              onClick={async () => {
-                const ok = await confirm({
-                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
-                  message: isAr ? 'هل تريد إلغاء وعكس إذن التسليم هذا؟' : 'Cancel this delivery note?',
-                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
-                  icon: Ban,
-                  variant: 'danger',
-                });
-                if (ok) {
-                  cancelTransaction('إذن تسليم عميل', d.deliveryNumber, 'إلغاء إذن تسليم عميل وعكس المخزون');
-                }
-              }}
-              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600"
-              title={isAr ? 'إلغاء وعكس' : 'Cancel / Reverse'}
+              onClick={() => setCancelModalDelivery(d)}
+              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+              title={isAr ? 'إلغاء وعكس إذن التسليم واستعادة المخزون' : 'Safe Cancellation & Reversal'}
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {d.status === 'CANCELLED' && (
+            <button
+              onClick={() => setCancelModalDelivery(d)}
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              title={isAr ? 'عرض تفاصيل الإلغاء والقيد العكسي' : 'View Reversal Details'}
             >
               <Ban className="w-3.5 h-3.5" />
             </button>
@@ -650,6 +650,17 @@ export const CustomerDeliveriesView: React.FC = () => {
             { labelAr: 'إجمالي قيمة الفاتورة البيعية', labelEn: 'Invoice Value', value: (printDelivery.sellingPriceEGP || 0) * printDelivery.quantity },
             { labelAr: 'تكلفة البضاعة المباعة (COGS)', labelEn: 'Cost of Goods Sold', value: printDelivery.totalDeliveryValueEGP }
           ]}
+        />
+      )}
+
+      {/* Safe One-Click Cancellation & Reversal Modal */}
+      {cancelModalDelivery && (
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalDelivery(null)}
+          documentType="CUSTOMER_DELIVERY"
+          documentNumber={cancelModalDelivery.deliveryNumber}
+          onSuccess={() => setCancelModalDelivery(null)}
         />
       )}
     </div>

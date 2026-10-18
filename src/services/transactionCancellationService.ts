@@ -30,6 +30,7 @@ export interface DependentDocInfo {
   id: string;
   documentType: string;
   documentTypeAr: string;
+  documentTypeEn: string;
   documentNumber: string;
   status: string;
   impactDescriptionAr: string;

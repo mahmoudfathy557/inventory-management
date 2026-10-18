@@ -18,6 +18,7 @@ import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { LandedCost } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 
 interface LandedCostViewProps {
   preselectedReceiptId?: string;
@@ -42,6 +43,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [printCost, setPrintCost] = useState<LandedCost | null>(null);
+  const [cancelModalCost, setCancelModalCost] = useState<LandedCost | null>(null);
 
   // Form states
   const [costDate, setCostDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -195,20 +197,18 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
           </button>
           {lc.status === 'POSTED' && (
             <button
-              onClick={async () => {
-                const ok = await confirm({
-                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
-                  message: isAr ? 'هل تريد إلغاء وعكس تكلفة الإنزال هذه؟' : 'Cancel this landed cost?',
-                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
-                  icon: Ban,
-                  variant: 'danger',
-                });
-                if (ok) {
-                  cancelTransaction('تكلفة إنزال', lc.landedCostNumber, 'إلغاء مصروف إنزال خطأ');
-                }
-              }}
-              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600"
-              title={isAr ? 'إلغاء وعكس' : 'Cancel / Reverse'}
+              onClick={() => setCancelModalCost(lc)}
+              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+              title={isAr ? 'إلغاء وعكس تكلفة الإنزال (Recompute Receipt & Item MAC)' : 'Safe Cancellation & Reversal'}
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {lc.status === 'CANCELLED' && (
+            <button
+              onClick={() => setCancelModalCost(lc)}
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              title={isAr ? 'عرض تفاصيل الإلغاء والقيد العكسي' : 'View Reversal Details'}
             >
               <Ban className="w-3.5 h-3.5" />
             </button>
@@ -492,6 +492,17 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
           financialSummary={[
             { labelAr: 'مبلغ تكلفة الإنزال المعتمد', labelEn: 'Allocated Landed Cost', value: printCost.amountEGP }
           ]}
+        />
+      )}
+
+      {/* Safe One-Click Cancellation & Reversal Modal */}
+      {cancelModalCost && (
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalCost(null)}
+          documentType="LANDED_COST"
+          documentNumber={cancelModalCost.landedCostNumber}
+          onSuccess={() => setCancelModalCost(null)}
         />
       )}
     </div>

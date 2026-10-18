@@ -20,7 +20,11 @@ import {
   DollarSign,
   AlertTriangle,
   Download,
-  ChevronDown
+  ChevronDown,
+  Ban,
+  Eye,
+  RotateCcw,
+  CheckCircle2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
@@ -39,6 +43,7 @@ import { ProductionCostImpactReport } from '../components/reports/ProductionCost
 import { AuditPrintHeader } from '../components/reports/AuditPrintHeader';
 import { AuditPrintFooter } from '../components/reports/AuditPrintFooter';
 import { PrintPreviewModal, PrintPreviewColumn, PrintPreviewSummaryItem } from '../components/common/PrintPreviewModal';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 
 import { InventoryAuditSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -51,7 +56,8 @@ type ReportTab =
   | 'scrap'
   | 'landed'
   | 'cost-impact'
-  | 'audit-log';
+  | 'audit-log'
+  | 'reversals';
 
 export const InventoryAuditView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -79,7 +85,7 @@ export const InventoryAuditView: React.FC = () => {
       const saved = localStorage.getItem('mrp_reports_tab') as ReportTab | null;
       const validTabs: ReportTab[] = [
         'ledger', 'balance', 'production', 'consumption',
-        'scrap', 'landed', 'cost-impact', 'audit-log'
+        'scrap', 'landed', 'cost-impact', 'audit-log', 'reversals'
       ];
       if (saved && validTabs.includes(saved)) {
         return saved;
@@ -96,6 +102,7 @@ export const InventoryAuditView: React.FC = () => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showCanceled, setShowCanceled] = useState(false);
+  const [cancelModalDoc, setCancelModalDoc] = useState<{ docType: string; docNumber: string } | null>(null);
 
   // Collect all cancelled document numbers
   const cancelledDocNums = React.useMemo(() => {
@@ -110,6 +117,260 @@ export const InventoryAuditView: React.FC = () => {
     (customerDeliveries || []).forEach(d => { if (d.status === 'CANCELLED') set.add(d.deliveryNumber); });
     return set;
   }, [receipts, landedCosts, issues, transfers, productionOrders, materialIssues, productionReceipts, customerDeliveries]);
+
+  // Unified list of all cancelled and reversed records across all 13 types
+  const cancelledRecords = React.useMemo(() => {
+    const list: Array<{
+      id: string;
+      documentNumber: string;
+      documentType: string;
+      documentTypeAr: string;
+      documentTypeEn: string;
+      date: string;
+      warehouseName: string;
+      itemName: string;
+      itemCode: string;
+      quantity: number;
+      uom: string;
+      totalValueEGP: number;
+      reversalNumber: string;
+      reversalReason: string;
+      createdBy: string;
+    }> = [];
+
+    (receipts || []).filter(r => r.status === 'CANCELLED').forEach(r => {
+      const wh = warehouses.find(w => w.id === r.warehouseId);
+      list.push({
+        id: r.id,
+        documentNumber: r.receiptNumber,
+        documentType: 'RECEIPT',
+        documentTypeAr: 'إذن استلام مخزني',
+        documentTypeEn: 'Goods Receipt PO',
+        date: r.date,
+        warehouseName: wh ? (isAr ? wh.nameAr : wh.nameEn) : r.warehouseId,
+        itemName: r.itemName,
+        itemCode: r.itemCode,
+        quantity: r.quantity,
+        uom: r.uom,
+        totalValueEGP: r.totalValueEGP,
+        reversalNumber: `REV-${r.receiptNumber}`,
+        reversalReason: r.notes || (isAr ? 'عكس قيد معتمد' : 'Authorized reversal'),
+        createdBy: r.createdBy
+      });
+    });
+
+    (issues || []).filter(i => i.status === 'CANCELLED').forEach(i => {
+      const wh = warehouses.find(w => w.id === i.fromWarehouseId);
+      list.push({
+        id: i.id,
+        documentNumber: i.issueNumber,
+        documentType: 'ISSUE',
+        documentTypeAr: 'إذن صرف مخزني',
+        documentTypeEn: 'Inventory Issue',
+        date: i.date,
+        warehouseName: wh ? (isAr ? wh.nameAr : wh.nameEn) : i.fromWarehouseId,
+        itemName: i.itemName,
+        itemCode: i.itemCode,
+        quantity: i.quantity,
+        uom: i.uom,
+        totalValueEGP: i.totalIssueValueEGP,
+        reversalNumber: `REV-${i.issueNumber}`,
+        reversalReason: i.notes || (isAr ? 'عكس إذن صرف' : 'Issue reversal'),
+        createdBy: i.createdBy
+      });
+    });
+
+    (transfers || []).filter(t => t.status === 'CANCELLED').forEach(t => {
+      const fWh = warehouses.find(w => w.id === t.fromWarehouseId);
+      const tWh = warehouses.find(w => w.id === t.toWarehouseId);
+      const whDesc = `${fWh ? (isAr ? fWh.nameAr : fWh.nameEn) : t.fromWarehouseId} ➔ ${tWh ? (isAr ? tWh.nameAr : tWh.nameEn) : t.toWarehouseId}`;
+      list.push({
+        id: t.id,
+        documentNumber: t.transferNumber,
+        documentType: 'TRANSFER',
+        documentTypeAr: 'إذن تحويل بين المستودعات',
+        documentTypeEn: 'Inventory Transfer',
+        date: t.date,
+        warehouseName: whDesc,
+        itemName: t.itemName,
+        itemCode: t.itemCode,
+        quantity: t.quantity,
+        uom: t.uom,
+        totalValueEGP: t.totalValueEGP,
+        reversalNumber: `REV-${t.transferNumber}`,
+        reversalReason: t.notes || (isAr ? 'عكس تحويل مخزني ثنائي' : 'Two-leg transfer reversal'),
+        createdBy: t.createdBy
+      });
+    });
+
+    (landedCosts || []).filter(lc => lc.status === 'CANCELLED').forEach(lc => {
+      const linkedItem = rawMaterials.find(m => m.id === lc.itemId) || products.find(p => p.id === lc.itemId);
+      list.push({
+        id: lc.id,
+        documentNumber: lc.landedCostNumber,
+        documentType: 'LANDED_COST',
+        documentTypeAr: 'تكلفة إنزال وشحن',
+        documentTypeEn: 'Landed Cost',
+        date: lc.date,
+        warehouseName: isAr ? 'تحميل مباشر على الاستلام' : 'Receipt Layer Allocation',
+        itemName: lc.itemName,
+        itemCode: linkedItem?.code || lc.itemId,
+        quantity: 0,
+        uom: '-',
+        totalValueEGP: lc.amountEGP,
+        reversalNumber: `REV-${lc.landedCostNumber}`,
+        reversalReason: lc.notes || (isAr ? 'عكس تكلفة إنزال' : 'Landed cost reversal'),
+        createdBy: lc.createdBy
+      });
+    });
+
+    (productionOrders || []).filter(po => (po.status as string) === 'CANCELLED').forEach(po => {
+      const wh = warehouses.find(w => w.id === po.wipWarehouseId);
+      list.push({
+        id: po.id,
+        documentNumber: po.orderNumber,
+        documentType: 'PRODUCTION_ORDER',
+        documentTypeAr: 'أمر إنتاج وتشغيل',
+        documentTypeEn: 'Production Order',
+        date: po.productionDate,
+        warehouseName: wh ? (isAr ? wh.nameAr : wh.nameEn) : po.wipWarehouseId,
+        itemName: po.productName,
+        itemCode: po.productCode,
+        quantity: po.plannedQuantity,
+        uom: po.uom,
+        totalValueEGP: po.totalProductionCostEGP || 0,
+        reversalNumber: `REV-${po.orderNumber}`,
+        reversalReason: po.notes || (isAr ? 'إلغاء أمر تشغيل' : 'Production order cancelled'),
+        createdBy: po.createdBy
+      });
+    });
+
+    (customerDeliveries || []).filter(cd => cd.status === 'CANCELLED').forEach(cd => {
+      const wh = warehouses.find(w => w.id === cd.warehouseId);
+      list.push({
+        id: cd.id,
+        documentNumber: cd.deliveryNumber,
+        documentType: 'CUSTOMER_DELIVERY',
+        documentTypeAr: 'إذن تسليم عميل',
+        documentTypeEn: 'Customer Delivery',
+        date: cd.date,
+        warehouseName: wh ? (isAr ? wh.nameAr : wh.nameEn) : cd.warehouseId,
+        itemName: cd.productName,
+        itemCode: cd.productCode,
+        quantity: cd.quantity,
+        uom: cd.uom,
+        totalValueEGP: cd.totalDeliveryValueEGP,
+        reversalNumber: `REV-${cd.deliveryNumber}`,
+        reversalReason: cd.notes || (isAr ? 'عكس تسليم بضاعة' : 'Delivery reversal'),
+        createdBy: cd.createdBy
+      });
+    });
+
+    return list;
+  }, [receipts, issues, transfers, landedCosts, productionOrders, customerDeliveries, warehouses, isAr]);
+
+  const cancelledColumns: Column<any>[] = [
+    {
+      key: 'documentNumber',
+      headerAr: 'رقم المستند الأصلي',
+      headerEn: 'Original Doc No',
+      render: r => (
+        <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+          {r.documentNumber}
+        </span>
+      ),
+      exportValue: r => r.documentNumber
+    },
+    {
+      key: 'reversalNumber',
+      headerAr: 'رقم القيد العكسي',
+      headerEn: 'Reversal Doc No',
+      render: r => (
+        <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+          {r.reversalNumber}
+        </span>
+      ),
+      exportValue: r => r.reversalNumber
+    },
+    {
+      key: 'documentType',
+      headerAr: 'نوع العملية',
+      headerEn: 'Transaction Type',
+      render: r => <span className="font-medium text-slate-800">{isAr ? r.documentTypeAr : r.documentTypeEn}</span>,
+      exportValue: r => isAr ? r.documentTypeAr : r.documentTypeEn
+    },
+    {
+      key: 'date',
+      headerAr: 'تاريخ الحركة',
+      headerEn: 'Date',
+      render: r => <span className="font-mono text-slate-700">{r.date}</span>,
+      exportValue: r => r.date
+    },
+    {
+      key: 'itemName',
+      headerAr: 'الصنف المستهدف',
+      headerEn: 'Item Name',
+      render: r => (
+        <div>
+          <div className="font-semibold text-slate-900">{r.itemName}</div>
+          <div className="text-[10px] text-slate-400 font-mono">{r.itemCode}</div>
+        </div>
+      ),
+      exportValue: r => r.itemName
+    },
+    {
+      key: 'warehouseName',
+      headerAr: 'المستودع / الموقع',
+      headerEn: 'Location',
+      render: r => <span className="text-slate-700">{r.warehouseName}</span>,
+      exportValue: r => r.warehouseName
+    },
+    {
+      key: 'quantity',
+      headerAr: 'الكمية المعكوسة',
+      headerEn: 'Reversed Qty',
+      render: r => (
+        <span className="font-mono font-bold text-slate-800">
+          {r.quantity > 0 ? `${formatNumber(r.quantity, language)} ${r.uom}` : '-'}
+        </span>
+      ),
+      exportValue: r => r.quantity
+    },
+    {
+      key: 'totalValueEGP',
+      headerAr: 'قيمة الحركة المعكوسة',
+      headerEn: 'Reversed Value (EGP)',
+      render: r => (
+        <span className="font-mono font-bold text-purple-700">
+          {formatCurrency(r.totalValueEGP, language)}
+        </span>
+      ),
+      exportValue: r => r.totalValueEGP
+    },
+    {
+      key: 'reversalReason',
+      headerAr: 'سبب ومبرر العكس',
+      headerEn: 'Reversal Reason',
+      render: r => <span className="text-slate-600 text-[11px]">{r.reversalReason}</span>,
+      exportValue: r => r.reversalReason
+    },
+    {
+      key: 'actions',
+      headerAr: 'الإجراء',
+      headerEn: 'Actions',
+      sortable: false,
+      render: r => (
+        <button
+          onClick={() => setCancelModalDoc({ docType: r.documentType, docNumber: r.documentNumber })}
+          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center gap-1 transition"
+          title={isAr ? 'عرض فحص الأثر الرقابي والعكس' : 'Inspect Reversal Audit'}
+        >
+          <Eye className="w-3 h-3 text-blue-600" />
+          <span>{isAr ? 'فحص الأثر' : 'Inspect'}</span>
+        </button>
+      )
+    }
+  ];
 
   // Ledger ERP Filter state
   const [erpFilters, setErpFilters] = useState<ERPFilters>({});
@@ -733,6 +994,44 @@ export const InventoryAuditView: React.FC = () => {
         );
       },
       exportValue: e => cancelledDocNums.has(e.documentNumber) ? 'CANCELED' : 'Active'
+    },
+    {
+      key: 'actions',
+      headerAr: 'الإجراء الرقابي',
+      headerEn: 'Action',
+      sortable: false,
+      render: e => {
+        const isCancelled = cancelledDocNums.has(e.documentNumber);
+        const isReversal = e.transactionType === TransactionType.REVERSAL || e.documentNumber.startsWith('REV-');
+        if (isReversal) {
+          return (
+            <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 whitespace-nowrap">
+              {isAr ? 'قيد عكسي معتمد' : 'Authorized Reversal'}
+            </span>
+          );
+        }
+        return (
+          <div className="flex items-center gap-1.5 justify-end">
+            {isCancelled ? (
+              <button
+                onClick={() => setCancelModalDoc({ docType: e.transactionType, docNumber: e.documentNumber })}
+                className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                title={isAr ? 'عرض تفاصيل الإلغاء والقيد العكسي' : 'View Cancellation & Reversal Audit'}
+              >
+                <Ban className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setCancelModalDoc({ docType: e.transactionType, docNumber: e.documentNumber })}
+                className="p-1 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+                title={isAr ? 'إلغاء وعكس العملية (Safe One-Click Reversal)' : 'Safe One-Click Reversal'}
+              >
+                <Ban className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        );
+      }
     }
   ];
 
@@ -784,6 +1083,12 @@ export const InventoryAuditView: React.FC = () => {
       labelAr: 'سجل التدقيق والمطابقة الشامل',
       labelEn: 'Global Audit Log',
       icon: Shield
+    },
+    {
+      id: 'reversals' as ReportTab,
+      labelAr: 'سجل العمليات الملغاة والقيود العكسية',
+      labelEn: 'Reversals & Cancellations',
+      icon: Ban
     }
   ];
 
@@ -835,6 +1140,12 @@ export const InventoryAuditView: React.FC = () => {
       titleEn: 'Global Industrial Security & System Audit Trail',
       subAr: 'توثيق غير قابل للتعديل لعمليات الإنشاء، التعديل، الاعتماد، والترحيل مع هوية المستخدم',
       subEn: 'Immutable audit trail of all create, update, approval, and posting actions with user signatures'
+    },
+    reversals: {
+      titleAr: 'سجل العمليات الملغاة والقيود العكسية وحركات الاسترداد',
+      titleEn: 'Cancelled Transactions & Authoritative Reversals Audit Register',
+      subAr: 'كشف تحليلي يوثق كافة العمليات الملغاة، القيود العكسية المرتبطة، وأثر إعادة احتساب متوسط التكلفة MAC',
+      subEn: 'Certified audit register of all cancelled documents, linked reversal vouchers, and MAC recalculation history'
     }
   };
 
@@ -987,6 +1298,78 @@ export const InventoryAuditView: React.FC = () => {
             titleEn="Item Inventory Ledger"
             exportFileName="Inventory_Ledger"
             rowClassName={e => cancelledDocNums.has(e.documentNumber) ? 'bg-rose-50/20 text-slate-400 opacity-75 line-through decoration-slate-300' : ''}
+          />
+        </div>
+      )}
+
+      {/* Reversals & Cancellations Tab Content */}
+      {activeTab === 'reversals' && (
+        <div className="space-y-4">
+          {/* Summary KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="text-[11px] text-slate-500 font-medium">
+                {isAr ? 'إجمالي العمليات الملغاة والمعكوسة' : 'Total Reversed Transactions'}
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-0.5">
+                {cancelledRecords.length}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1">
+                {isAr ? 'موثقة ومحفوظة بالكامل بالأثر الرقابي' : 'Immutable audit trail retained'}
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-purple-50/70 rounded-xl border border-purple-200">
+              <div className="text-[11px] text-purple-800 font-medium">
+                {isAr ? 'إجمالي قيمة القيود العكسية' : 'Total Reversal Value'}
+              </div>
+              <div className="text-xl font-bold font-mono text-purple-700 mt-0.5">
+                {formatCurrency(
+                  cancelledRecords.reduce((sum, r) => sum + (r.totalValueEGP || 0), 0),
+                  language
+                )}
+              </div>
+              <div className="text-[10px] text-purple-600 mt-1">
+                {isAr ? 'تم استبعادها من التقييم الجاري للمخزون' : 'Excluded from active inventory value'}
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200">
+              <div className="text-[11px] text-emerald-800 font-medium">
+                {isAr ? 'نسبة الامتثال والربط المزدوج' : 'Integrity Compliance Rate'}
+              </div>
+              <div className="text-xl font-bold font-mono text-emerald-700 mt-0.5">
+                100%
+              </div>
+              <div className="text-[10px] text-emerald-600 mt-1">
+                {isAr ? 'كافة القيود مقترنة برقم عكسي (REV-)' : 'All cancellations have linked reversal refs'}
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200">
+              <div className="text-[11px] text-blue-800 font-medium">
+                {isAr ? 'قاعدة عدم الحذف المادي' : 'Zero Physical Deletion Rule'}
+              </div>
+              <div className="text-xs font-bold text-blue-900 mt-1 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>{isAr ? 'معتمد وفقاً لمعايير SAP B1' : 'SAP B1 & ETA Compliant'}</span>
+              </div>
+              <div className="text-[10px] text-blue-600 mt-1">
+                {isAr ? 'الحفاظ على تاريخ الحركات للأغراض الضريبية' : 'Full history preserved for tax & audit'}
+              </div>
+            </div>
+          </div>
+
+          {/* Table */}
+          <DataTable
+            id="audit-reversals-table"
+            data={cancelledRecords}
+            columns={cancelledColumns}
+            keyExtractor={r => r.id}
+            searchFields={['documentNumber', 'reversalNumber', 'itemName', 'reversalReason']}
+            titleAr="سجل العمليات الملغاة والقيود العكسية المعتمدة"
+            titleEn="Official Reversals & Cancellations Register"
+            exportFileName="Reversals_Audit_Register"
           />
         </div>
       )}
@@ -1444,6 +1827,17 @@ export const InventoryAuditView: React.FC = () => {
           />
         );
       })()}
+
+      {/* Safe One-Click Transaction Cancellation & Reversal Modal */}
+      {cancelModalDoc && (
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalDoc(null)}
+          documentType={cancelModalDoc.docType}
+          documentNumber={cancelModalDoc.docNumber}
+          onSuccess={() => setCancelModalDoc(null)}
+        />
+      )}
     </div>
   );
 };

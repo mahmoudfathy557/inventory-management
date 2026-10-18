@@ -37,6 +37,7 @@ import { ProductionOrdersSkeleton } from '../components/common/Skeleton';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 import {
   ProductionOrder,
   ProductionOrderStatus,
@@ -133,6 +134,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
   const [printOrder, setPrintOrder] = useState<ProductionOrder | null>(null);
   const [detailOrder, setDetailOrder] = useState<ProductionOrder | null>(null);
   const [modifyOrder, setModifyOrder] = useState<ProductionOrder | null>(null);
+  const [cancelModalOrder, setCancelModalOrder] = useState<ProductionOrder | null>(null);
 
   // Form states
   const [targetProductId, setTargetProductId] = useState(products[0]?.id || 'prod-001');
@@ -511,6 +513,35 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
               title={isAr ? 'تعديل تكلفة متأخرة على الأمر (Section 48)' : 'Adjust Past Cost'}
             >
               <DollarSign className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Action: Safe Deletion (Draft) or Safe Cancellation & Reversal (Posted) */}
+          {o.status === ProductionOrderStatus.DRAFT && (
+            <button
+              onClick={() => setCancelModalOrder(o)}
+              className="p-1.5 rounded-md hover:bg-amber-50 text-amber-600 hover:text-amber-700 transition"
+              title={isAr ? 'حذف مسودة أمر الإنتاج دون أثر مخزني' : 'Delete Draft Order'}
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {o.status !== ProductionOrderStatus.DRAFT && o.status !== ProductionOrderStatus.CANCELLED && (
+            <button
+              onClick={() => setCancelModalOrder(o)}
+              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+              title={isAr ? 'إلغاء وعكس أمر الإنتاج والتحقق من التبعيات' : 'Safe Cancellation & Reversal'}
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {o.status === ProductionOrderStatus.CANCELLED && (
+            <button
+              onClick={() => setCancelModalOrder(o)}
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              title={isAr ? 'عرض تفاصيل الإلغاء والقيد العكسي' : 'View Reversal Details'}
+            >
+              <Ban className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -1463,6 +1494,17 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
         onPrint={setPrintOrder}
         onOpenModify={setModifyOrder}
       />
+
+      {/* Safe One-Click Cancellation & Reversal Modal */}
+      {cancelModalOrder && (
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalOrder(null)}
+          documentType="PRODUCTION_ORDER"
+          documentNumber={cancelModalOrder.orderNumber}
+          onSuccess={() => setCancelModalOrder(null)}
+        />
+      )}
     </div>
   );
 };

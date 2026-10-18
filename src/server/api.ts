@@ -14,6 +14,7 @@ import { INITIAL_USERS } from '../data/initialData.ts';
 import { SEED_USERS, SEED_RAW_MATERIALS, SEED_PRODUCTS } from '../data/seedData.ts';
 import { UserRole, User } from '../types.ts';
 import { RBAC_ROLE_DEFINITIONS, getEffectivePermissions } from '../utils/rbac.ts';
+import { SAP_TRANSACTION_RULES, SapTransactionCode } from '../config/transactionConfig.ts';
 import { ValuationEngine, InventoryPostingPayload, ReversalPostingPayload } from './valuationEngine.ts';
 
 // Initialize authoritative balances from initial/seed items on module load

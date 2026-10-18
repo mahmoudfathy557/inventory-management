@@ -4,14 +4,17 @@ export enum WarehouseType {
   RAW_MATERIALS = 'RAW_MATERIALS',
   FINISHED_GOODS = 'FINISHED_GOODS',
   SCRAP = 'SCRAP',
-  WIP = 'WIP'
+  WIP = 'WIP',
+  PACKING = 'PACKING'
 }
 
 export enum ItemType {
   RAW_MATERIAL = 'RAW_MATERIAL',
   SEMI_FINISHED = 'SEMI_FINISHED',
   FINISHED_PRODUCT = 'FINISHED_PRODUCT',
-  SCRAP = 'SCRAP'
+  SCRAP = 'SCRAP',
+  PACKING = 'PACKING',
+  RESOURCE = 'RESOURCE'
 }
 
 export enum ValuationMethod {

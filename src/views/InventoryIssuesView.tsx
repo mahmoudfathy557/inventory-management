@@ -21,6 +21,7 @@ import { InventoryIssue } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 
 export const InventoryIssuesView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -87,6 +88,7 @@ export const InventoryIssuesView: React.FC = () => {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [printIssue, setPrintIssue] = useState<InventoryIssue | null>(null);
+  const [cancelModalIssue, setCancelModalIssue] = useState<InventoryIssue | null>(null);
 
   // Form states
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id || 'wh-raw');
@@ -253,20 +255,18 @@ export const InventoryIssuesView: React.FC = () => {
           </button>
           {i.status === 'POSTED' && (
             <button
-              onClick={async () => {
-                const ok = await confirm({
-                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
-                  message: isAr ? 'هل تريد إلغاء وعكس إذن الصرف هذا؟' : 'Cancel this issue?',
-                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
-                  icon: Ban,
-                  variant: 'danger',
-                });
-                if (ok) {
-                  cancelTransaction('إذن صرف مخزني', i.issueNumber, 'إلغاء إذن صرف');
-                }
-              }}
-              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600"
-              title={isAr ? 'إلغاء وعكس' : 'Cancel / Reverse'}
+              onClick={() => setCancelModalIssue(i)}
+              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+              title={isAr ? 'إلغاء وعكس إذن الصرف (Safe Cancellation & Reversal)' : 'Safe Cancellation & Reversal'}
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {i.status === 'CANCELLED' && (
+            <button
+              onClick={() => setCancelModalIssue(i)}
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              title={isAr ? 'عرض تفاصيل الإلغاء والقيد العكسي' : 'View Reversal Details'}
             >
               <Ban className="w-3.5 h-3.5" />
             </button>
@@ -574,6 +574,17 @@ export const InventoryIssuesView: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Safe One-Click Cancellation & Reversal Modal */}
+      {cancelModalIssue && (
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalIssue(null)}
+          documentType="ISSUE"
+          documentNumber={cancelModalIssue.issueNumber}
+          onSuccess={() => setCancelModalIssue(null)}
+        />
       )}
 
       {printIssue && (

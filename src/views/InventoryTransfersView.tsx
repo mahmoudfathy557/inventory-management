@@ -27,6 +27,7 @@ import { InventoryTransfer } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
+import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
 
 export const InventoryTransfersView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -106,6 +107,7 @@ export const InventoryTransfersView: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [printTransfer, setPrintTransfer] = useState<InventoryTransfer | null>(null);
+  const [cancelModalTransfer, setCancelModalTransfer] = useState<InventoryTransfer | null>(null);
 
   // Form state
   const [fromWhId, setFromWhId] = useState(warehouses[0]?.id || 'wh-raw');
@@ -328,20 +330,18 @@ export const InventoryTransfersView: React.FC = () => {
           </button>
           {t.status === 'POSTED' && (
             <button
-              onClick={async () => {
-                const ok = await confirm({
-                  title: isAr ? 'تأكيد الإلغاء' : 'Confirm Cancellation',
-                  message: isAr ? 'هل تريد إلغاء وعكس إذن التحويل هذا؟' : 'Cancel this transfer?',
-                  confirmLabel: isAr ? 'تأكيد الإلغاء' : 'Confirm',
-                  icon: Ban,
-                  variant: 'danger',
-                });
-                if (ok) {
-                  cancelTransaction('إذن تحويل مخزني', t.transferNumber, 'إلغاء أمر تحويل');
-                }
-              }}
-              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600"
-              title={isAr ? 'إلغاء وعكس' : 'Cancel / Reverse'}
+              onClick={() => setCancelModalTransfer(t)}
+              className="p-1.5 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+              title={isAr ? 'إلغاء وعكس إذن التحويل لكلا الطرفين (Atomic Reversal)' : 'Safe Cancellation & Reversal'}
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {t.status === 'CANCELLED' && (
+            <button
+              onClick={() => setCancelModalTransfer(t)}
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              title={isAr ? 'عرض تفاصيل الإلغاء والقيد العكسي' : 'View Reversal Details'}
             >
               <Ban className="w-3.5 h-3.5" />
             </button>
@@ -801,6 +801,17 @@ export const InventoryTransfersView: React.FC = () => {
         onClose={() => setIsScannerOpen(false)}
         onApplyTransfer={handleApplyScannerTransfer}
       />
+
+      {/* Safe One-Click Cancellation & Reversal Modal */}
+      {cancelModalTransfer && (
+        <SafeTransactionCancelModal
+          isOpen={true}
+          onClose={() => setCancelModalTransfer(null)}
+          documentType="TRANSFER"
+          documentNumber={cancelModalTransfer.transferNumber}
+          onSuccess={() => setCancelModalTransfer(null)}
+        />
+      )}
     </div>
   );
 };
