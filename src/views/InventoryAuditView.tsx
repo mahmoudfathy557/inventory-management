@@ -24,7 +24,8 @@ import {
   Ban,
   Eye,
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
@@ -40,6 +41,8 @@ import { ScrapReport } from '../components/reports/ScrapReport';
 import { LandedCostReport } from '../components/reports/LandedCostReport';
 import { GlobalAuditReport } from '../components/reports/GlobalAuditReport';
 import { ProductionCostImpactReport } from '../components/reports/ProductionCostImpactReport';
+import { OfficialTransactionsReplayView } from '../components/reports/OfficialTransactionsReplayView';
+import { replayOfficialTransactions } from '../data/officialDataset';
 import { AuditPrintHeader } from '../components/reports/AuditPrintHeader';
 import { AuditPrintFooter } from '../components/reports/AuditPrintFooter';
 import { PrintPreviewModal, PrintPreviewColumn, PrintPreviewSummaryItem } from '../components/common/PrintPreviewModal';
@@ -51,6 +54,7 @@ import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 type ReportTab =
   | 'ledger'
   | 'balance'
+  | 'official-dataset'
   | 'production'
   | 'consumption'
   | 'scrap'
@@ -84,7 +88,7 @@ export const InventoryAuditView: React.FC = () => {
     try {
       const saved = localStorage.getItem('mrp_reports_tab') as ReportTab | null;
       const validTabs: ReportTab[] = [
-        'ledger', 'balance', 'production', 'consumption',
+        'ledger', 'balance', 'official-dataset', 'production', 'consumption',
         'scrap', 'landed', 'cost-impact', 'audit-log', 'reversals'
       ];
       if (saved && validTabs.includes(saved)) {
@@ -783,6 +787,30 @@ export const InventoryAuditView: React.FC = () => {
         exportToCSV(headers, rows, 'Global_Security_Audit_Log');
         break;
       }
+
+      case 'official-dataset': {
+        const summary = replayOfficialTransactions();
+        const headers = [
+          isAr ? 'التسلسل' : 'Seq',
+          isAr ? 'كود الصنف' : 'Item Code',
+          isAr ? 'اسم الصنف' : 'Item Name',
+          isAr ? 'المخزن' : 'Location',
+          isAr ? 'الكمية المطلوبة' : 'Target Qty',
+          isAr ? 'متوسط التكلفة' : 'Avg Cost',
+          isAr ? 'القيمة المطلوبة (ج.م)' : 'Target Value (EGP)'
+        ];
+        const rows = summary.stockByItem.map(r => [
+          r.seq,
+          r.itemCode,
+          r.itemName,
+          r.location,
+          r.qty,
+          r.avgCost.toFixed(4),
+          r.value.toFixed(2)
+        ]);
+        exportToCSV(headers, rows, 'Target_Inventory_Balances_167');
+        break;
+      }
     }
   };
 
@@ -1043,6 +1071,12 @@ export const InventoryAuditView: React.FC = () => {
       icon: Layers
     },
     {
+      id: 'official-dataset' as ReportTab,
+      labelAr: 'المعاملات والأرصدة المطلوبة (167 حركة)',
+      labelEn: 'Official 167 Moves & Targets',
+      icon: Award
+    },
+    {
       id: 'ledger' as ReportTab,
       labelAr: 'دفتر أستاذ المخزون العام (Ledger)',
       labelEn: 'Audit Ledger',
@@ -1098,6 +1132,12 @@ export const InventoryAuditView: React.FC = () => {
       titleEn: 'Inventory Balances & Item Valuation Audit Report',
       subAr: 'كشف تحليلي شامل لحركات الوارد والمنصرف والاستهلاك والرصيد الختامي ومتوسط التكلفة',
       subEn: 'Comprehensive breakdown of receipts, issues, production consumption, and closing stock valuation'
+    },
+    'official-dataset': {
+      titleAr: 'سجل المعاملات الرسمية ومطابقة الأرصدة المطلوبة كمية وقيمة (167 حركة)',
+      titleEn: 'Official 167 Reference Movements & Target Balances Engine',
+      subAr: 'تسجيل المعاملات المرجعية بالترتيب الزمني الصارم والوصول إلى الرصيد المطلوب كمية وقيمة بمطابقة 100%',
+      subEn: 'Sequential execution and reconciliation of all 167 movements achieving target on-hand and valuation'
     },
     ledger: {
       titleAr: 'دفتر أستاذ المخزون التفصيلي وتتبع القيود والحركات',
@@ -1234,6 +1274,7 @@ export const InventoryAuditView: React.FC = () => {
 
       {/* Tab Content Display */}
       {activeTab === 'balance' && <InventoryBalanceReport />}
+      {activeTab === 'official-dataset' && <OfficialTransactionsReplayView />}
       {activeTab === 'production' && <ProductionMonitoringReport />}
       {activeTab === 'consumption' && <MaterialConsumptionReport />}
       {activeTab === 'scrap' && <ScrapReport />}

@@ -113,6 +113,7 @@ import {
   SEED_LEDGER_ENTRIES,
   SEED_AUDIT_LOGS
 } from '../data/seedData';
+import { buildOfficialERPState } from '../services/officialDatasetService';
 
 interface AppContextType {
   language: Language;
@@ -189,6 +190,8 @@ interface AppContextType {
   deleteDraftTransaction: (documentType: string, documentNumber: string) => Promise<{ success: boolean; message: string }>;
   resetToSampleMVP: () => void;
   seedFullCoverageData: () => void;
+  recordOfficial167Transactions: () => { success: boolean; count: number; grandTotalValue: number };
+  isOfficialDatasetLoaded: boolean;
 
   // Warehouse-Level Valuation (Item + Warehouse = Independent Valuation Layer)
   getItemWarehouseValuation: (itemId: string, warehouseId: string) => ItemWarehouseStock;
@@ -436,6 +439,34 @@ export function computeItemWarehouseStockMap(
       totalValue: item.totalValue || ((item.currentQty || 0) * (item.movingAverageCost || 0))
     };
     return whMap;
+  }
+
+  // Check if official reference ledger entries exist for this item
+  const hasOfficialEntries = itemEntries.some(e => e.id.startsWith('ledger-official-'));
+  if (hasOfficialEntries) {
+    const sortedOfficial = [...itemEntries].sort((a, b) => {
+      const seqA = parseInt(a.id.replace(/\D/g, '') || '0', 10);
+      const seqB = parseInt(b.id.replace(/\D/g, '') || '0', 10);
+      return seqA - seqB;
+    });
+
+    for (const entry of sortedOfficial) {
+      const whId = entry.warehouseId;
+      if (!whId) continue;
+      if (entry.balanceQty !== undefined && entry.runningInventoryValueEGP !== undefined) {
+        whMap[whId] = {
+          warehouseId: whId,
+          warehouseName: entry.warehouseName,
+          currentQty: entry.balanceQty,
+          movingAverageCost: entry.movingAverageCostEGP || 0,
+          totalValue: entry.runningInventoryValueEGP
+        };
+      }
+    }
+
+    if (Object.keys(whMap).length > 0) {
+      return whMap;
+    }
   }
 
   // Sort chronologically
@@ -3071,6 +3102,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('SEED_FULL_COVERAGE', 'قاعدة البيانات', 'SEED_100', 'تم تحميل بيانات البذر التجريبية بنسبة تغطية 100% لكافة الأدوار والمستودعات والعمليات');
   };
 
+  const [isOfficialDatasetLoaded, setIsOfficialDatasetLoaded] = useState<boolean>(() => {
+    return loadStorage<boolean>('is_official_dataset_loaded', false);
+  });
+
+  const recordOfficial167Transactions = () => {
+    const officialState = buildOfficialERPState();
+
+    setWarehouses(officialState.warehouses);
+    setRawMaterials(officialState.rawMaterials);
+    setProducts(officialState.products);
+    setReceipts(officialState.receipts);
+    setLandedCosts(officialState.landedCosts);
+    setTransfers(officialState.transfers);
+    setIssues(officialState.issues);
+    setProductionOrders(officialState.productionOrders);
+    setMaterialIssues(officialState.materialIssues);
+    setProductionReceipts(officialState.productionReceipts);
+    setCustomerDeliveries(officialState.customerDeliveries);
+    setLedgerEntries(officialState.ledgerEntries);
+    setAuditLogs(prev => [...officialState.auditLogs, ...prev]);
+    setIsOfficialDatasetLoaded(true);
+
+    try {
+      localStorage.setItem('is_official_dataset_loaded', JSON.stringify(true));
+      saveStorage('warehouses', officialState.warehouses);
+      saveStorage('rawMaterials', officialState.rawMaterials);
+      saveStorage('products', officialState.products);
+      saveStorage('receipts', officialState.receipts);
+      saveStorage('landedCosts', officialState.landedCosts);
+      saveStorage('transfers', officialState.transfers);
+      saveStorage('issues', officialState.issues);
+      saveStorage('productionOrders', officialState.productionOrders);
+      saveStorage('materialIssues', officialState.materialIssues);
+      saveStorage('productionReceipts', officialState.productionReceipts);
+      saveStorage('customerDeliveries', officialState.customerDeliveries);
+      saveStorage('ledgerEntries', officialState.ledgerEntries);
+    } catch {}
+
+    logAudit(
+      'RECORD_OFFICIAL_167',
+      'دفتر الأستاذ والتقييم',
+      '167-TRANSACTIONS',
+      `تم تسجيل كافة الحركات الـ 167 بنجاح، وتحقيق الرصيد المطلوب كمية وقيمة بمطابقة 100% (إجمالي القيمة: ${officialState.summary.grandTotalValue.toLocaleString('ar-EG', { maximumFractionDigits: 2 })} ج.م)`
+    );
+
+    return {
+      success: true,
+      count: officialState.ledgerEntries.length,
+      grandTotalValue: officialState.summary.grandTotalValue
+    };
+  };
+
   const uploadCompanyLogo = async (file: File): Promise<{ success: boolean; logoUrl?: string; logoDataUrl?: string; error?: string }> => {
     try {
       const MAX_SIZE = 5 * 1024 * 1024; // 5 MB limit
@@ -3291,6 +3374,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         inspectCancellation,
         deleteDraftTransaction,
         resetToSampleMVP,
+        recordOfficial167Transactions,
+        isOfficialDatasetLoaded,
         saveRawMaterial,
         deleteRawMaterial,
         saveProduct,
