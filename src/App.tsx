@@ -272,7 +272,9 @@ const MainAppContent: React.FC = () => {
 
                 {currentTab === 'odoo-sync' && <OdooIntegrationView />}
 
-                {currentTab === 'data-import-export' && <DataImportExportView />}
+                {currentTab === 'data-import-export' && (
+                  <DataImportExportView onNavigateToView={tab => setCurrentTab(tab as NavItem)} />
+                )}
 
                 {(currentTab === 'master-data' || currentTab === 'users') && (
                   <MasterDataView initialTab={currentTab === 'users' ? 'users' : undefined} />
