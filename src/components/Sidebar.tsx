@@ -42,6 +42,7 @@ export type NavItem =
   | 'master-data'
   | 'reports'
   | 'odoo-sync'
+  | 'data-import-export'
   | 'users'
   | 'settings'
   | 'auth';
@@ -190,6 +191,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
           labelAr: 'البيانات الأساسية (Master Data)',
           labelEn: 'Master Data & BOMs',
           icon: Database
+        },
+        {
+          id: 'data-import-export',
+          labelAr: 'استيراد وتصدير البيانات (Excel/CSV)',
+          labelEn: 'Data Import & Export',
+          icon: FileSpreadsheet,
+          highlight: true
         },
         {
           id: 'users',

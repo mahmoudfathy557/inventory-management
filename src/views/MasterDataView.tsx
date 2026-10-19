@@ -21,11 +21,14 @@ import {
   ArrowRightLeft,
   Copy,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
 import { formatCurrency, formatNumber } from '../utils/formatters';
+import { DataImportExportModal } from '../components/common/DataImportExportModal';
+import { EntityKey } from '../services/dataImportExportService';
 import {
   RawMaterial,
   Product,
@@ -185,6 +188,23 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | null>(null);
   const [currencySubTab, setCurrencySubTab] = useState<'RATES_BY_DATE' | 'CURRENCIES'>('RATES_BY_DATE');
   const [isClearSeedModalOpen, setIsClearSeedModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const getActiveEntityKey = (): EntityKey => {
+    switch (activeSubTab) {
+      case 'categories': return 'categories';
+      case 'raw': return 'rawMaterials';
+      case 'products': return 'products';
+      case 'boms': return 'boms';
+      case 'warehouses': return warehouseViewType === 'LOC' ? 'locations' : 'warehouses';
+      case 'machines': return 'machines';
+      case 'partners': return partnerSubtype === 'CUSTOMERS' ? 'customers' : 'suppliers';
+      case 'uoms': return 'uoms';
+      case 'currencies': return 'currencies';
+      case 'users': return 'users';
+      default: return 'rawMaterials';
+    }
+  };
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -302,7 +322,18 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
         </div>
 
         {/* Dynamic Add Action Button & Clear Seed Action */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Data Import & Export Modal Trigger */}
+          <button
+            id="btn-master-data-import-export"
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3 py-2 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title={isAr ? 'تحميل قوالب واستيراد وتصدير بيانات هذا الجدول' : 'Import / Export this table'}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isAr ? 'استيراد وتصدير (Excel / CSV)' : 'Import / Export'}</span>
+          </button>
+
           <button
             onClick={() => setIsClearSeedModalOpen(true)}
             className="px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
@@ -1976,6 +2007,12 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab }) =>
       <ClearSeedDataModal
         isOpen={isClearSeedModalOpen}
         onClose={() => setIsClearSeedModalOpen(false)}
+      />
+
+      <DataImportExportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultEntity={getActiveEntityKey()}
       />
     </div>
   );

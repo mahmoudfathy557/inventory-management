@@ -239,6 +239,7 @@ export function canAccessTab(role: UserRole, tabId: string): boolean {
       return [UserRole.ADMIN, UserRole.FINANCE_USER, UserRole.PRODUCTION_USER, UserRole.INVENTORY_USER, UserRole.MANAGEMENT_USER].includes(role);
 
     case 'users':
+    case 'data-import-export':
       // Strictly Super Admin
       return role === UserRole.ADMIN;
 

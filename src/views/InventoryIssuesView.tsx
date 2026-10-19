@@ -8,7 +8,8 @@ import {
   AlertOctagon,
   ArrowRightLeft,
   Scale,
-  Lock
+  Lock,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -22,6 +23,7 @@ import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
+import { DataImportExportModal } from '../components/common/DataImportExportModal';
 
 export const InventoryIssuesView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -41,6 +43,7 @@ export const InventoryIssuesView: React.FC = () => {
   const isAr = language === 'ar';
 
   const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const filteredIssues = useMemo(() => {
     return (issues || []).filter(i => {
@@ -290,14 +293,26 @@ export const InventoryIssuesView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          id="btn-new-issue"
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{isAr ? 'إصدار إذن صرف مخزني' : 'New Issue'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-issues-import-export"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition cursor-pointer"
+            title={isAr ? 'تحميل قوالب واستيراد وتصدير أذون الصرف' : 'Import / Export Issues'}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isAr ? 'استيراد وتصدير (Excel / CSV)' : 'Import / Export'}</span>
+          </button>
+
+          <button
+            id="btn-new-issue"
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isAr ? 'إصدار إذن صرف مخزني' : 'New Issue'}</span>
+          </button>
+        </div>
       </div>
 
       {/* ERP Smart Filter Bar */}
@@ -610,6 +625,12 @@ export const InventoryIssuesView: React.FC = () => {
           ]}
         />
       )}
+
+      <DataImportExportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultEntity="issues"
+      />
     </div>
   );
 };

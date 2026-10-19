@@ -12,7 +12,8 @@ import {
   WifiOff,
   RefreshCw,
   Zap,
-  Scale
+  Scale,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -28,6 +29,7 @@ import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import { SmartFilterBar, ERPFilters } from '../components/common/SmartFilterBar';
 import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
+import { DataImportExportModal } from '../components/common/DataImportExportModal';
 
 export const InventoryTransfersView: React.FC = () => {
   const { isLoading } = usePerceivedLoading(180);
@@ -49,6 +51,7 @@ export const InventoryTransfersView: React.FC = () => {
   const isAr = language === 'ar';
 
   const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const filteredTransfers = useMemo(() => {
     return (transfers || []).filter(t => {
@@ -365,7 +368,17 @@ export const InventoryTransfersView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-transfers-import-export"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition cursor-pointer"
+            title={isAr ? 'تحميل قوالب واستيراد وتصدير التحويلات المخزنية' : 'Import / Export Transfers'}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isAr ? 'استيراد وتصدير (Excel / CSV)' : 'Import / Export'}</span>
+          </button>
+
           <button
             id="btn-open-barcode-scanner"
             onClick={() => setIsScannerOpen(true)}
@@ -379,7 +392,7 @@ export const InventoryTransfersView: React.FC = () => {
           <button
             id="btn-new-transfer"
             onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>{isAr ? 'إصدار إذن تحويل مخزني' : 'New Transfer'}</span>
@@ -812,6 +825,12 @@ export const InventoryTransfersView: React.FC = () => {
           onSuccess={() => setCancelModalTransfer(null)}
         />
       )}
+
+      <DataImportExportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultEntity="transfers"
+      />
     </div>
   );
 };

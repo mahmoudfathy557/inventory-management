@@ -8,7 +8,8 @@ import {
   X,
   CheckCircle,
   HelpCircle,
-  TrendingUp
+  TrendingUp,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from '../components/common/ConfirmDialog';
@@ -19,6 +20,7 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { LandedCost } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
+import { DataImportExportModal } from '../components/common/DataImportExportModal';
 
 interface LandedCostViewProps {
   preselectedReceiptId?: string;
@@ -42,6 +44,7 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
   const isAr = language === 'ar';
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [printCost, setPrintCost] = useState<LandedCost | null>(null);
   const [cancelModalCost, setCancelModalCost] = useState<LandedCost | null>(null);
 
@@ -233,14 +236,26 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
           </p>
         </div>
 
-        <button
-          id="btn-add-landed-cost"
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{isAr ? 'إضافة تكلفة إنزال جديدة' : 'New Landed Cost'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-landed-cost-import-export"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition cursor-pointer"
+            title={isAr ? 'تحميل قوالب واستيراد وتصدير تكاليف الإنزال' : 'Import / Export Landed Costs'}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isAr ? 'استيراد وتصدير (Excel / CSV)' : 'Import / Export'}</span>
+          </button>
+
+          <button
+            id="btn-add-landed-cost"
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isAr ? 'إضافة تكلفة إنزال جديدة' : 'New Landed Cost'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Proof Box Example from Spec */}
@@ -505,6 +520,12 @@ export const LandedCostView: React.FC<LandedCostViewProps> = ({ preselectedRecei
           onSuccess={() => setCancelModalCost(null)}
         />
       )}
+
+      <DataImportExportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultEntity="landedCosts"
+      />
     </div>
   );
 };

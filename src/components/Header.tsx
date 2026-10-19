@@ -8,11 +8,13 @@ import {
   Command,
   ChevronDown,
   Shield,
-  Coins
+  Coins,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useConfirm } from './common/ConfirmDialog';
 import { NavItem } from './Sidebar';
+import { UserRole } from '../types';
 import { GlobalSearchModal } from './common/GlobalSearchModal';
 import { NotificationCenter } from './common/NotificationCenter';
 import { PWAInstallButton } from './common/PWAInstallButton';
@@ -80,6 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
     'master-data': { ar: 'البيانات الأساسية', en: 'Master Data' },
     reports: { ar: 'التقارير والأستاذ', en: 'Reports & Ledger' },
     'odoo-sync': { ar: 'تكامل أودو ERP', en: 'Odoo ERP Sync' },
+    'data-import-export': { ar: 'استيراد وتصدير البيانات', en: 'Data Import & Export' },
     users: { ar: 'الصلاحيات', en: 'User RBAC' },
     settings: { ar: 'إعدادات وهوية الشركة', en: 'Company Settings & Logo' },
     auth: { ar: 'تسجيل الدخول', en: 'Authentication' }
@@ -173,6 +176,19 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Notification Center Trigger (All Screens) */}
             <NotificationCenter onNavigate={onNavigate} />
+
+            {/* Admin Data Import/Export Quick Action */}
+            {currentUser?.role === UserRole.ADMIN && (
+              <button
+                id="btn-header-data-import-export"
+                onClick={() => onNavigate?.('data-import-export')}
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-xs font-bold text-emerald-800 transition cursor-pointer shadow-2xs"
+                title={isAr ? 'مركز استيراد وتصدير البيانات وقوالب Excel' : 'Data Import & Export Center'}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="hidden lg:inline">{isAr ? 'استيراد / تصدير' : 'Import / Export'}</span>
+              </button>
+            )}
 
             {/* Language Switcher (Tablet & Desktop) */}
             <button

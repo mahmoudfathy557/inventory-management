@@ -10,7 +10,8 @@ import {
   CheckCircle,
   HelpCircle,
   Calculator,
-  ArrowRightLeft
+  ArrowRightLeft,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DataTable, Column } from '../components/common/DataTable';
@@ -18,6 +19,7 @@ import { StatusChip } from '../components/common/StatusChip';
 import { DocumentPrintModal } from '../components/common/DocumentPrintModal';
 import { LocationValuationCard } from '../components/common/LocationValuationCard';
 import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
+import { DataImportExportModal } from '../components/common/DataImportExportModal';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { InventoryReceipt, ItemType } from '../types';
 import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
@@ -48,6 +50,7 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
   const isAr = language === 'ar';
 
   const [erpFilters, setErpFilters] = useState<ERPFilters>({});
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const filteredReceipts = useMemo(() => {
     return (receipts || []).filter(r => {
@@ -357,14 +360,26 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
           </p>
         </div>
 
-        <button
-          id="btn-create-receipt"
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{isAr ? 'إصدار إذن إضافة مخزني جديد' : 'New Receipt'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-receipts-import-export"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition cursor-pointer"
+            title={isAr ? 'تحميل قوالب واستيراد وتصدير أذون الاستلام' : 'Import / Export Receipts'}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isAr ? 'استيراد وتصدير (Excel / CSV)' : 'Import / Export'}</span>
+          </button>
+
+          <button
+            id="btn-create-receipt"
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isAr ? 'إصدار إذن إضافة مخزني جديد' : 'New Receipt'}</span>
+          </button>
+        </div>
       </div>
 
       {/* ERP Smart Filter Bar */}
@@ -724,6 +739,12 @@ export const InventoryReceiptsView: React.FC<InventoryReceiptsViewProps> = ({ on
           ]}
         />
       )}
+
+      <DataImportExportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultEntity="receipts"
+      />
     </div>
   );
 };

@@ -38,6 +38,7 @@ import { usePerceivedLoading } from '../hooks/usePerceivedLoading';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { getAvailableUOMsForItem, getConversionFactorToBase, formatUOMTransactionLabel } from '../utils/uomHelper';
 import { SafeTransactionCancelModal } from '../components/inventory/SafeTransactionCancelModal';
+import { DataImportExportModal } from '../components/common/DataImportExportModal';
 import {
   ProductionOrder,
   ProductionOrderStatus,
@@ -127,6 +128,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
   }, [initialTab]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isProduceModalOpen, setIsProduceModalOpen] = useState(false);
   const [isCostAdjOpen, setIsCostAdjOpen] = useState(false);
@@ -564,16 +566,27 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
           </p>
         </div>
 
-        {activeSubTab === 'orders' ? (
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            id="btn-create-prod-order"
-            onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition"
+            id="btn-prod-orders-import-export"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition cursor-pointer"
+            title={isAr ? 'تحميل قوالب واستيراد وتصدير أوامر الإنتاج' : 'Import / Export Production Orders'}
           >
-            <Plus className="w-4 h-4" />
-            <span>{isAr ? 'إنشاء أمر إنتاج جديد' : 'New Production Order'}</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isAr ? 'استيراد وتصدير (Excel / CSV)' : 'Import / Export'}</span>
           </button>
-        ) : (
+
+          {activeSubTab === 'orders' ? (
+            <button
+              id="btn-create-prod-order"
+              onClick={() => setIsCreateOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isAr ? 'إنشاء أمر إنتاج جديد' : 'New Production Order'}</span>
+            </button>
+          ) : (
           <button
             id="btn-create-cost-adj-top"
             onClick={() => {
@@ -587,6 +600,7 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
             <span>{isAr ? 'تسجيل تسوية تكلفة متأخرة' : 'New Cost Adjustment'}</span>
           </button>
         )}
+        </div>
       </div>
 
       {/* Sub-Tabs: Production Orders vs Cost Adjustments */}
@@ -1505,6 +1519,12 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
           onSuccess={() => setCancelModalOrder(null)}
         />
       )}
+
+      <DataImportExportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultEntity="productionOrders"
+      />
     </div>
   );
 };
