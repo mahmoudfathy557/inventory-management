@@ -226,82 +226,93 @@ export const QualityControlView: React.FC = () => {
 
       {/* Modal: Decision */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 text-xs">
-            <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-              <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <span>
-                {isAr
-                  ? `فحص واعتماد دفعة أمر الإنتاج (${selectedOrder.orderNumber})`
-                  : 'Quality Decision Voucher'}
-              </span>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <div className="font-bold text-slate-800 text-xs">{selectedOrder.productName}</div>
-              <div className="text-slate-600 flex justify-between font-mono text-[11px]">
-                <span>{isAr ? 'كمية الدفعة: ' : 'Quantity: '} {selectedOrder.actualFinishedQuantity} {selectedOrder.uom}</span>
-                <span>{isAr ? 'تكلفة الوحدة: ' : 'Unit Cost: '} {formatCurrency(selectedOrder.finishedGoodsUnitCostEGP, language)}</span>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3.5 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <span>
+                  {isAr
+                    ? `فحص واعتماد دفعة أمر الإنتاج (${selectedOrder.orderNumber})`
+                    : 'Quality Decision Voucher'}
+                </span>
               </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1.5">
-                {isAr ? 'قرار فحص الجودة الرسمي *' : 'Inspection Decision *'}
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDecision(QualityStatus.APPROVED)}
-                  className={`p-3 rounded-xl border text-center transition font-bold flex items-center justify-center gap-1.5 ${
-                    decision === QualityStatus.APPROVED
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-500/20'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  <span>{isAr ? 'مطابق واعتماد الإفراج (Release)' : 'Approve & Release'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDecision(QualityStatus.REJECTED)}
-                  className={`p-3 rounded-xl border text-center transition font-bold flex items-center justify-center gap-1.5 ${
-                    decision === QualityStatus.REJECTED
-                      ? 'bg-rose-50 border-rose-500 text-rose-700 ring-2 ring-rose-500/20'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <XCircle className="w-4 h-4 text-rose-600" />
-                  <span>{isAr ? 'مرفوض وإعادة تشغيل' : 'Reject'}</span>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                {isAr ? 'تقرير وملاحظات مفتش الجودة' : 'Inspector Notes'}
-              </label>
-              <textarea
-                rows={3}
-                value={inspectorNotes}
-                onChange={e => setInspectorNotes(e.target.value)}
-                className="w-full p-2.5 rounded-lg border border-slate-200"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => setSelectedOrder(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0 text-xs">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <div className="font-bold text-slate-800 text-xs">{selectedOrder.productName}</div>
+                <div className="text-slate-600 flex justify-between font-mono text-[11px]">
+                  <span>{isAr ? 'كمية الدفعة: ' : 'Quantity: '} {selectedOrder.actualFinishedQuantity} {selectedOrder.uom}</span>
+                  <span>{isAr ? 'تكلفة الوحدة: ' : 'Unit Cost: '} {formatCurrency(selectedOrder.finishedGoodsUnitCostEGP, language)}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  {isAr ? 'قرار فحص الجودة الرسمي *' : 'Inspection Decision *'}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDecision(QualityStatus.APPROVED)}
+                    className={`p-3 rounded-xl border text-center transition font-bold flex items-center justify-center gap-1.5 ${
+                      decision === QualityStatus.APPROVED
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-500/20'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span>{isAr ? 'مطابق واعتماد الإفراج (Release)' : 'Approve & Release'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDecision(QualityStatus.REJECTED)}
+                    className={`p-3 rounded-xl border text-center transition font-bold flex items-center justify-center gap-1.5 ${
+                      decision === QualityStatus.REJECTED
+                        ? 'bg-rose-50 border-rose-500 text-rose-700 ring-2 ring-rose-500/20'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <span>{isAr ? 'مرفوض وإعادة تشغيل' : 'Reject'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {isAr ? 'تقرير وملاحظات مفتش الجودة' : 'Inspector Notes'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={inspectorNotes}
+                  onChange={e => setInspectorNotes(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 sm:px-5 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium text-xs transition"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 type="button"
                 onClick={handleApproveSubmit}
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs active:scale-98 transition"
               >
                 {isAr ? 'حفظ وتثبيت قرار الجودة' : 'Confirm Decision'}
               </button>

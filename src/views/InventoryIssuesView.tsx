@@ -349,9 +349,9 @@ export const InventoryIssuesView: React.FC = () => {
 
       {/* Create Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3.5 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <div className="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
                   Type 2 — SAP B1
@@ -373,12 +373,13 @@ export const InventoryIssuesView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs">
-              {/* Item Selection */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {isAr ? 'الصنف المراد صرفه *' : 'Item to Issue *'}
-                </label>
+            <form onSubmit={handleCreateSubmit} className="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0 text-xs">
+                {/* Item Selection */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isAr ? 'الصنف المراد صرفه *' : 'Item to Issue *'}
+                  </label>
                 <select
                   value={selectedItemId}
                   onChange={e => setSelectedItemId(e.target.value)}
@@ -562,29 +563,43 @@ export const InventoryIssuesView: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
-                >
-                  {isAr ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isInsufficient || quantity <= 0}
-                  className={`px-5 py-2.5 rounded-lg font-bold text-white transition flex items-center gap-2 ${
-                    isInsufficient || quantity <= 0
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/20'
-                  }`}
-                >
-                  {isInsufficient ? (
-                    <span>{isAr ? 'عجز في الرصيد - غير مسموح بالصرف' : 'Insufficient Location Stock'}</span>
-                  ) : (
-                    <span>{isAr ? 'ترحيل إذن الصرف' : 'Post Issue'}</span>
-                  )}
-                </button>
+              </div>
+
+              {/* Pinned Bottom Footer */}
+              <div className="p-3 sm:px-5 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="text-amber-900 font-sans font-semibold">
+                    {isAr ? 'إجمالي قيمة الصرف:' : 'Total Value:'}
+                  </span>
+                  <span className="font-bold text-amber-950 text-sm bg-white px-2.5 py-1 rounded-md border border-amber-200 shadow-xs">
+                    {formatCurrency(totalIssueValueEGP, language)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateOpen(false)}
+                    className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium text-xs transition"
+                  >
+                    {isAr ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isInsufficient || quantity <= 0}
+                    className={`px-5 py-2 rounded-lg font-bold text-white text-xs transition flex items-center gap-2 ${
+                      isInsufficient || quantity <= 0
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/20 active:scale-98'
+                    }`}
+                  >
+                    {isInsufficient ? (
+                      <span>{isAr ? 'عجز في الرصيد - غير مسموح بالصرف' : 'Insufficient Location Stock'}</span>
+                    ) : (
+                      <span>{isAr ? 'ترحيل إذن الصرف' : 'Post Issue'}</span>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

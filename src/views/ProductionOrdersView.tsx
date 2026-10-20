@@ -775,9 +775,9 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
       {/* Modal: Create Production Order */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3.5 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Factory className="w-5 h-5 text-blue-400" />
                 <h3 className="font-bold text-sm">
@@ -792,12 +792,13 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'المنتج التام المراد تصنيعه *' : 'Target Finished Product *'}
-                  </label>
+            <form onSubmit={handleCreateSubmit} className="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {isAr ? 'المنتج التام المراد تصنيعه *' : 'Target Finished Product *'}
+                    </label>
                   <select
                     value={targetProductId}
                     onChange={e => setTargetProductId(e.target.value)}
@@ -920,17 +921,20 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              </div>
+
+              {/* Pinned Bottom Footer */}
+              <div className="p-3 sm:px-5 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium text-xs transition"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition"
                 >
                   {isAr ? 'اعتماد أمر الإنتاج' : 'Confirm Order'}
                 </button>
@@ -942,9 +946,9 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
       {/* Modal: Issue Materials to Production */}
       {isIssueModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3.5 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <div className="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
                   Type 4 — SAP B1
@@ -966,12 +970,13 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
               </button>
             </div>
 
-            <form onSubmit={handleIssueSubmit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isAr ? 'المادة الخام المستهدفة *' : 'Target Raw Material *'}
-                  </label>
+            <form onSubmit={handleIssueSubmit} className="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {isAr ? 'المادة الخام المستهدفة *' : 'Target Raw Material *'}
+                    </label>
                   <input
                     type="text"
                     value={`${activeRawMat.nameAr} (${activeRawMat.code})`}
@@ -1105,21 +1110,24 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 </span>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              </div>
+
+              {/* Pinned Bottom Footer */}
+              <div className="p-3 sm:px-5 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsIssueModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium text-xs transition"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={isIssueExceeding || issueQty <= 0}
-                  className={`px-5 py-2 rounded-lg font-bold text-white transition flex items-center gap-2 ${
+                  className={`px-5 py-2 rounded-lg font-bold text-white text-xs transition flex items-center gap-2 ${
                     isIssueExceeding || issueQty <= 0
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20'
+                      : 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20 active:scale-98'
                   }`}
                 >
                   {isIssueExceeding ? (
@@ -1136,9 +1144,9 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
       {/* Modal: Production Receipt */}
       {isProduceModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3.5 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <div className="p-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 font-mono text-[10px] font-bold px-2 py-0.5">
                   Type 3 — SAP B1
@@ -1160,8 +1168,9 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
               </button>
             </div>
 
-            <form onSubmit={handleProduceSubmit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleProduceSubmit} className="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     {isAr ? 'المنتج التام المستلم *' : 'Finished Product *'}
@@ -1349,18 +1358,21 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 </span>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              </div>
+
+              {/* Pinned Bottom Footer */}
+              <div className="p-3 sm:px-5 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsProduceModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium text-xs transition"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={finishedQty <= 0}
-                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20"
+                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-98 transition"
                 >
                   {isAr ? 'ترحيل استلام الإنتاج' : 'Post Production Receipt'}
                 </button>
@@ -1372,9 +1384,9 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
 
       {/* Modal: Cost Adjustment (Section 48) */}
       {isCostAdjOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3.5 sm:px-5 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-purple-400" />
                 <h3 className="font-bold text-sm">
@@ -1389,7 +1401,8 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
               </button>
             </div>
 
-            <form onSubmit={handleCostAdjSubmit} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleCostAdjSubmit} className="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0 text-xs">
               <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-purple-900 text-xs">
                 {isAr
                   ? 'وفقاً للبند 48: في حال ورود تكاليف متأخرة بعد إغلاق الدفعة، يتم توزيع الفارق نسبياً بين المخزون الباقي وتكلفة البضاعة المباعة (COGS).'
@@ -1444,17 +1457,20 @@ export const ProductionOrdersView: React.FC<ProductionOrdersViewProps> = ({ onNa
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              </div>
+
+              {/* Pinned Bottom Footer */}
+              <div className="p-3 sm:px-5 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsCostAdjOpen(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium text-xs transition"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                  className="px-5 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs active:scale-98 transition"
                 >
                   {isAr ? 'ترحيل تسوية التكلفة' : 'Post Adjustment'}
                 </button>
