@@ -152,13 +152,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             }}
           >
             <div
-              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl sm:max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-150 my-auto"
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl sm:max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 my-auto"
               role="dialog"
               aria-modal="true"
               aria-labelledby="pwa-guide-title"
             >
               {/* Header */}
-              <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
                     <Smartphone className="w-5 h-5" />
@@ -186,7 +186,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
 
               {/* Guide Body */}
-              <div className="p-5 sm:p-6 space-y-4 text-xs">
+              <div className="p-5 sm:p-6 space-y-4 text-xs flex-1 min-h-0 overflow-y-auto">
                 {/* One-Click Direct Installation Banner inside Modal Overlay if Browser supports prompt */}
                 {isInstallable && (
                   <div className="p-4 bg-gradient-to-r from-sky-900/90 via-slate-900 to-blue-950 border border-sky-500/40 rounded-2xl text-white space-y-2.5 shadow-md">

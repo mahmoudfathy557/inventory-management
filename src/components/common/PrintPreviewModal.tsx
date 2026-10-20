@@ -258,7 +258,7 @@ ${summaryCards ? summaryCards.map(s => `${isAr ? s.labelAr : s.labelEn}: ${s.val
     >
       {/* Modal Container */}
       <div
-        className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 w-full max-w-7xl flex flex-col max-h-[96vh] overflow-hidden print:max-h-none print:h-auto print:border-0 print:shadow-none print:bg-white print:rounded-none"
+        className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 w-full max-w-7xl flex flex-col max-h-[90vh] my-auto overflow-hidden print:max-h-none print:h-auto print:border-0 print:shadow-none print:bg-white print:rounded-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby="print-preview-modal-title"

@@ -37,8 +37,8 @@ export const ProductionOrderDetailModal: React.FC<ProductionOrderDetailModalProp
   if (!isOpen || !order) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-xl border border-slate-200 flex flex-col space-y-4 max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-xl border border-slate-200 flex flex-col space-y-4 max-h-[90vh] my-auto overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">

@@ -517,8 +517,8 @@ export const InventoryBalanceReport: React.FC = () => {
         const currentValuation = lastActiveEntry ? lastActiveEntry.runningInventoryValueEGP : (itemRow?.closingValue || 0);
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
-            <div className="bg-white rounded-2xl max-w-5xl w-full p-5 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+            <div className="bg-white rounded-2xl max-w-5xl w-full p-4 sm:p-5 shadow-2xl border border-slate-200 max-h-[90vh] my-auto flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150">
               {/* Modal Header */}
               <div className="flex items-start justify-between border-b border-slate-100 pb-3">
                 <div className="space-y-1 flex-1">

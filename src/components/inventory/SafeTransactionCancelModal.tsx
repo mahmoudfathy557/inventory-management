@@ -124,8 +124,8 @@ export const SafeTransactionCancelModal: React.FC<SafeTransactionCancelModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] sm:max-h-[90vh] border border-slate-200 shadow-2xl overflow-hidden flex flex-col text-xs animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] my-auto border border-slate-200 shadow-2xl overflow-hidden flex flex-col text-xs animate-in fade-in zoom-in-95 duration-150">
         
         {/* Header */}
         <div className={`p-4 border-b flex items-center justify-between ${

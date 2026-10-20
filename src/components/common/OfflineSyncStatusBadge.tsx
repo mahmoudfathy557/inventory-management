@@ -166,13 +166,13 @@ export const OfflineSyncStatusBadge: React.FC<OfflineSyncStatusBadgeProps> = ({
         createPortal(
           <div
             id="modal-offline-sync-queue"
-            className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150"
+            className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150"
             onClick={(e) => {
               if (e.target === e.currentTarget) setIsOpen(false);
             }}
           >
           <div
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl sm:max-w-3xl lg:max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl sm:max-w-3xl lg:max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in zoom-in-95 duration-150"
             role="dialog"
             aria-modal="true"
             aria-labelledby="sync-queue-modal-title"

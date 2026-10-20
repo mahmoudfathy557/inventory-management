@@ -141,8 +141,8 @@ export const WalkthroughModal: React.FC<WalkthroughModalProps> = ({ isOpen, onCl
   const current = steps[activeStep];
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] my-auto overflow-hidden flex flex-col">
         {/* Header */}
         <div className="p-4 bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -197,7 +197,7 @@ export const WalkthroughModal: React.FC<WalkthroughModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Main Content Card */}
-        <div className="p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5 flex-1 min-h-0 overflow-y-auto">
           <div className="flex items-center justify-between">
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
               {isAr ? current.badgeAr : current.badgeEn}
