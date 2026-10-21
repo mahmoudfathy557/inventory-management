@@ -21,9 +21,10 @@ function getPostgresOptions(): postgres.Options<{}> | string | null {
     };
   }
 
-  // Fallback to DATABASE_URL only if it is not pointing to an unreachable docker-compose alias
+  // Use DATABASE_URL whenever it is set. Any PostgreSQL URL is valid, including
+  // Docker Compose service names (e.g. postgres://user:pass@postgres:5432/db).
   const dbUrl = process.env.DATABASE_URL;
-  if (dbUrl && !dbUrl.includes('@postgres:')) {
+  if (dbUrl) {
     return dbUrl;
   }
 

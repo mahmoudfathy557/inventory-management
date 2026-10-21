@@ -21,7 +21,12 @@ services:
       retries: 10
       start_period: 10s
     networks:
-      - inventory_network
+      inventory_network:
+        aliases:
+          # Unique alias: "postgres" is ambiguous on Coolify's shared "coolify"
+          # network (Coolify's own control-panel DB also answers to "postgres"),
+          # which makes ~50% of connections hit the wrong server.
+          - inventory-db
 
   app:
     build:
@@ -34,7 +39,7 @@ services:
     environment:
       PORT: 8082
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-inventory_user}:${POSTGRES_PASSWORD:-inventory_secure_password}@postgres:5432/${POSTGRES_DB:-inventory_db}}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-inventory_user}:${POSTGRES_PASSWORD:-inventory_secure_password}@inventory-db:5432/${POSTGRES_DB:-inventory_db}}
       JWT_SECRET: ${JWT_SECRET:-change_this_to_a_secure_random_jwt_secret_key_in_coolify}
       JWT_EXPIRES_IN: 7d
     ports:

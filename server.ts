@@ -14,7 +14,7 @@ async function startServer() {
   const app = express();
   const portArgIndex = process.argv.indexOf('--port');
   const portFromArg = portArgIndex !== -1 ? Number(process.argv[portArgIndex + 1]) : null;
-  const PORT = portFromArg || 3000;
+  const PORT = portFromArg || Number(process.env.PORT) || 3000;
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
